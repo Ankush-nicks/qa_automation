@@ -12,6 +12,7 @@ import re
 import threading
 from html import escape
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -180,16 +181,34 @@ def api_generate():
 
 
 # ------------------------------------------------------------------ sending --
-# Send goes to a Power Automate flow ("When an HTTP request is received" ->
-# "Send an email (V2)"), see POWER_AUTOMATE.md. SEND_MODE is "test" unless set
-# to "live": in test mode every email goes to SEND_TEST_TO instead of the
-# instructor, with no CC, "[TEST]" in the subject and a note of who it would
-# have gone to.
+# Send posts the email to SEND_API_URL: a Google Apps Script web app attached to a
+# Google Sheet (GOOGLE_SHEETS.md) that sends from Gmail and logs every email, or a
+# Power Automate flow (POWER_AUTOMATE.md). SEND_MODE picks what happens:
+#   dryrun (default) - the email goes with dry_run=true; it is checked (and logged
+#                      by the sheet) but NO email is sent
+#   test             - every email goes to SEND_TEST_TO instead of the instructor,
+#                      with no CC, "[TEST]" in the subject and a note of who it
+#                      would have gone to
+#   live             - the email goes to the instructor with the CC list
+# The Google script refuses a live email to an instructor already emailed in the
+# last SEND_REPEAT_DAYS days (default 7) unless the page confirms it (force).
+SEND_MODES = ("dryrun", "test", "live")
+
+
 def send_config() -> dict:
     url = os.getenv("SEND_API_URL", "").strip()
-    mode = "live" if os.getenv("SEND_MODE", "").strip().lower() == "live" else "test"
+    mode = os.getenv("SEND_MODE", "").strip().lower().replace("-", "").replace("_", "")
+    mode = mode if mode in SEND_MODES else "dryrun"
     test_to = ", ".join(e for e in re.split(r"[,;\s]+", os.getenv("SEND_TEST_TO", "")) if e)
-    return {"configured": bool(url) and (mode == "live" or bool(test_to)), "url": url, "mode": mode, "test_to": test_to}
+    provider = "google" if "script.google.com" in url else "powerautomate"
+    try:
+        repeat_days = max(1, int(os.getenv("SEND_REPEAT_DAYS", "7")))
+    except ValueError:
+        repeat_days = 7
+    return {"configured": bool(url) and (mode != "test" or bool(test_to)), "url": url, "mode": mode,
+            "test_to": test_to, "provider": provider,
+            "provider_name": "Google Sheets" if provider == "google" else "Power Automate",
+            "repeat_days": repeat_days}
 
 
 def _emails(v) -> list[str]:
@@ -198,12 +217,15 @@ def _emails(v) -> list[str]:
 
 
 def build_message(p: dict, cfg: dict) -> dict:
-    """The JSON the flow receives. Addresses are ';'-separated strings, which is what
-    Outlook's 'Send an email (V2)' expects in To and CC."""
+    """The JSON the sender receives. Addresses are ';'-separated strings (what Outlook's
+    'Send an email (V2)' expects; the Google script accepts them too)."""
     to, cc = _emails(p.get("to")), _emails(p.get("cc"))
     subject = str(p.get("subject") or "").strip()
     html, text = str(p.get("html") or ""), str(p.get("text") or "")
-    test = cfg["mode"] != "live"
+    dry_run = cfg["mode"] == "dryrun"
+    test = cfg["mode"] == "test"
+    if dry_run:
+        subject = f"[DRY RUN] {subject}"
     if test:
         note = f"TEST EMAIL. In live mode this would go to: {'; '.join(to)}" + (f" | CC: {'; '.join(cc)}" if cc else "")
         html = (f'<p style="font-family:Arial,sans-serif;font-size:13px;background:#FFF4CE;border:1px solid #E8C547;'
@@ -212,7 +234,34 @@ def build_message(p: dict, cfg: dict) -> dict:
         to, cc, subject = _emails(cfg["test_to"]), [], f"[TEST] {subject}"
     return {"to": "; ".join(to), "cc": "; ".join(cc), "subject": subject, "html": html, "text": text,
             "instructor_id": str(p.get("instructor_id") or ""), "instructor_name": str(p.get("instructor_name") or ""),
-            "test": test}
+            "instructor_email": "; ".join(_emails(p.get("to"))),
+            "subject_area": str(p.get("subject_area") or ""), "institute": str(p.get("institute") or ""),
+            "scores": str(p.get("scores") or ""), "sender_name": str(p.get("sender_name") or "Central QA Team"),
+            "test": test, "dry_run": dry_run, "force": bool(p.get("force")), "repeat_days": cfg["repeat_days"],
+            "secret": os.getenv("SEND_SECRET", "").strip()}
+
+
+def _call_sender(req: urllib.request.Request):
+    """Returns (parsed JSON or text, None) or (None, error message). Apps Script answers a
+    POST with a redirect to its result, which urllib follows with a GET."""
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            raw = r.read()
+    except urllib.error.HTTPError as e:
+        detail = e.read()[:300].decode(errors="replace")
+        app.logger.error("sender refused: %s %s", e.code, detail)
+        return None, f"refused the request ({e.code}). {detail}".strip()
+    except Exception as e:  # noqa: BLE001
+        app.logger.exception("sender unreachable")
+        return None, f"couldn’t be reached ({e})."
+    text = raw.decode(errors="replace").strip()
+    if text.startswith("<"):  # a sign-in or error page instead of JSON
+        return None, ("answered with a web page instead of JSON. For Google, check the web app is deployed "
+                      "with ‘Who has access: Anyone’.")
+    try:
+        return (json.loads(text) if text else None), None
+    except ValueError:
+        return text[:300], None
 
 
 @app.post("/api/send")
@@ -221,27 +270,51 @@ def api_send():
     if not _emails(p.get("to")) or not str(p.get("subject") or "").strip() or not (p.get("html") or p.get("text")):
         return jsonify(error="The email needs a recipient, a subject and a body."), 400
     cfg = send_config()
+    name = cfg["provider_name"]
     if not cfg["url"]:
         return jsonify(error="Sending isn’t set up yet. Use Copy email for now."), 501
     if not cfg["configured"]:
         return jsonify(error="Test mode needs SEND_TEST_TO (the address that receives test emails) on the server."), 501
+    if cfg["provider"] == "google" and not os.getenv("SEND_SECRET", "").strip():
+        return jsonify(error="Google Sheets sending needs SEND_SECRET on the server (the same value as the "
+                             "script’s SECRET property)."), 501
     msg = build_message(p, cfg)
     headers = {"Content-Type": "application/json"}
     token = os.getenv("SEND_API_TOKEN", "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    try:
-        req = urllib.request.Request(cfg["url"], data=json.dumps(msg).encode(), headers=headers, method="POST")
-        with urllib.request.urlopen(req, timeout=60) as r:
-            r.read()
-    except urllib.error.HTTPError as e:
-        detail = e.read()[:300].decode(errors="replace")
-        app.logger.error("send failed: %s %s", e.code, detail)
-        return jsonify(error=f"Power Automate refused the email ({e.code}). {detail}".strip()), 502
-    except Exception as e:  # noqa: BLE001
-        app.logger.exception("send failed")
-        return jsonify(error=f"Couldn’t reach Power Automate ({e})."), 502
-    return jsonify(ok=True, test=msg["test"], to=msg["to"])
+    req = urllib.request.Request(cfg["url"], data=json.dumps(msg).encode(), headers=headers, method="POST")
+    out, err = _call_sender(req)
+    if err:
+        return jsonify(error=f"{name} {err}"), 502
+    if isinstance(out, dict) and out.get("ok") is False:
+        if out.get("duplicate"):
+            return jsonify(error=out.get("error") or "Already emailed recently.", duplicate=True,
+                           last_sent=out.get("last_sent"), repeat_days=out.get("repeat_days")), 409
+        return jsonify(error=f"{name}: {out.get('error') or 'the email wasn’t sent.'}"), 502
+    if msg["dry_run"] and not (isinstance(out, dict) and out.get("dry_run")):
+        # the sender didn't confirm the dry run, so it may not know about dry runs
+        app.logger.warning("dry run: sender answered without dry_run=true: %r", out)
+        return jsonify(error=f"Dry run: {name} answered, but didn’t confirm it skipped sending. "
+                             f"Check its setup guide."), 502
+    return jsonify(ok=True, test=msg["test"], dry_run=msg["dry_run"], to=msg["to"],
+                   sent_at=(out or {}).get("sent_at") if isinstance(out, dict) else None)
+
+
+@app.get("/api/sent-log")
+def api_sent_log():
+    """Live emails sent in the last SEND_REPEAT_DAYS days, read from the Google Sheet log
+    (empty for Power Automate, which keeps no log)."""
+    cfg = send_config()
+    secret = os.getenv("SEND_SECRET", "").strip()
+    if not cfg["url"] or cfg["provider"] != "google" or not secret:
+        return jsonify(sent=[], available=False)
+    qs = urllib.parse.urlencode({"action": "recent", "days": cfg["repeat_days"], "secret": secret})
+    out, err = _call_sender(urllib.request.Request(f"{cfg['url']}?{qs}", method="GET"))
+    if err or not isinstance(out, dict) or out.get("ok") is False:
+        return jsonify(sent=[], available=False,
+                       error=err or (out.get("error") if isinstance(out, dict) else "unexpected answer"))
+    return jsonify(sent=out.get("sent") or [], available=True, days=out.get("days"))
 
 
 @app.post("/api/roster")

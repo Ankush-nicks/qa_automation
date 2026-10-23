@@ -322,8 +322,9 @@ async function loadStatus(){
     if(saved&&saved.toLowerCase().split(/[,;\s]+/).filter(Boolean).join(",")===OLD_DEFAULT){ saved=null; try{ localStorage.removeItem("qa.cc"); }catch(_){} }
     state.mgrs=j.managers; state.send=j.send||{};
     $("sendStatus").innerHTML = !state.send.configured ? `<span class="dot off"></span>Sending not set up (Copy email still works)`
-      : state.send.mode==="live" ? `<span class="dot on"></span>Sending: <b>live</b>, emails go to instructors`
-      : `<span class="dot test"></span>Sending: <b>test mode</b>, every email goes to ${esc(state.send.test_to)}`;
+      : state.send.mode==="live" ? `<span class="dot on"></span>Sending via ${esc(state.send.provider_name)}: <b>live</b>, emails go to instructors`
+      : state.send.mode==="dryrun" ? `<span class="dot test"></span>Sending via ${esc(state.send.provider_name)}: <b>dry run</b>, Send tests the connection and no email goes out`
+      : `<span class="dot test"></span>Sending via ${esc(state.send.provider_name)}: <b>test mode</b>, every email goes to ${esc(state.send.test_to)}`;
     $("mgrStatus").textContent = j.managers&&j.managers.count
       ? `Capability managers: ${j.managers.file} (${j.managers.count}), matched to the names in column F`
       : "No capability manager list found on the server.";
@@ -362,6 +363,7 @@ async function analyze(first){
     return;
   }
   state.data=j; state.prevFile=state.file;
+  if(first) loadSentLog();
   if(first){
     $("sReview").value=j.settings.review;
     state.drafts={}; state.busy={}; state.failed={}; state.tab="flagged";
@@ -430,7 +432,8 @@ function render(){
   $("list").innerHTML=rows.length?rows.map(x=>{
     const cells=x.days.map(d=>`<span class="cell ${scoreClass(d.avg,T)}" title="${esc(dShort(d.date))}">${d.avg==null?"–":d.avg.toFixed(1)}</span>`).join("");
     const d=state.drafts[x.id];
-    const chip=state.sent[x.id]?`<span class="chip ai">Sent</span>`:state.busy[x.id]?`<span class="chip busy">Writing…</span>`:state.failed[x.id]?`<span class="chip fail">AI failed</span>`:(d&&d.source==="ai")?`<span class="chip ai">AI draft</span>`:"";
+    const le=lastEmailed(x);
+    const chip=le?`<span class="chip ai">Emailed ${dayLabel(le)}</span>`:state.sent[x.id]?`<span class="chip ai">${esc(state.sent[x.id])}</span>`:state.busy[x.id]?`<span class="chip busy">Writing…</span>`:state.failed[x.id]?`<span class="chip fail">AI failed</span>`:(d&&d.source==="ai")?`<span class="chip ai">AI draft</span>`:"";
     return `<li><button class="item" data-id="${esc(x.id)}" aria-current="${state.sel===x.id}"><span><span class="nm">${esc(x.name)}</span><span class="mt">${esc(x.category)}${x.institute?", "+esc(x.institute):""}</span>${chip}</span><span class="strip">${cells}</span></button></li>`;
   }).join(""):`<li class="emptylist">${state.tab==="flagged"?"No instructors meet this rule. Try a different threshold above.":"No instructors in this list."}</li>`;
   $("copyAll").disabled=!G.flagged.length;
@@ -468,7 +471,7 @@ function renderDetail(S){
     </div>${marks}</div>
     <h3>Email</h3>
     ${warns.map(w=>`<div class="warn">${esc(w)}</div>`).join("")}
-    <p class="source">${src}${sent?` · Sent ${esc(sent)}`:""}</p>
+    <p class="source">${src}${sent?` · ${esc(sent)}`:""}${(()=>{ const le=lastEmailed(x); return le?` · <b>Last emailed ${dayLabel(le)}</b>`:""; })()}</p>
     ${busy?`<div class="busyline"><span class="spin" aria-hidden="true"></span>Writing with AI from the scores and rubric. This usually takes about 10 seconds.</div>`:""}
     <div class="letterhead">
       <label for="eTo">To</label><input id="eTo" value="${esc(x.email)}" readonly>
@@ -503,23 +506,56 @@ function emailText(d){
 }
 
 // Send goes through the server (/api/send), which passes it on to the email API once that is set up
+// Live emails already sent (from the Google Sheet log), so repeats can be spotted
+async function loadSentLog(){
+  state.history={byId:new Map(),byEmail:new Map(),available:false};
+  try{
+    const j=await (await fetch("/api/sent-log")).json();
+    state.history.available=!!j.available;
+    (j.sent||[]).forEach(s=>{ const at=new Date(s.sent_at); if(isNaN(at)) return;
+      const keep=(m,k)=>{ if(k&&(!m.get(k)||m.get(k)<at)) m.set(k,at); };
+      keep(state.history.byId,normId(s.instructor_id)); keep(state.history.byEmail,String(s.email||"").toLowerCase()); });
+  }catch(_){}
+  if(state.data) render();
+}
+const lastEmailed=x=>{ const h=state.history; if(!h) return null;
+  const a=h.byId.get(normId(x.id)), b=h.byEmail.get(String(x.email||"").toLowerCase());
+  return a&&b?(a>b?a:b):(a||b||null); };
+const dayLabel=d=>`${d.getDate()} ${MONTHS[d.getMonth()]}`;
+
 async function sendEmail(id){
   const x=inst(id), d=state.drafts[id]; if(!x||!d||state.sending[id]) return;
   const cc=ccFor(x);
-  const sd=state.send||{};
-  const ask=sd.configured&&sd.mode!=="live"
+  const sd=state.send||{}, via=sd.provider_name||"the email service";
+  const prev=sd.mode==="live"?lastEmailed(x):null;
+  const repeat=prev?`${x.name} was already emailed on ${dayLabel(prev)}, within the last ${sd.repeat_days||7} days.\n\n`:"";
+  const ask=sd.configured&&sd.mode==="dryrun"
+    ? `DRY RUN: this checks the ${via} connection. No email is sent to anyone.\n\nRun the dry run?`
+    : sd.configured&&sd.mode==="test"
     ? `TEST MODE: this goes to ${sd.test_to} only, not to ${x.email}.\n\nSend the test email?`
-    : `Send this email to ${x.email}${cc?`\nCC: ${cc}`:""}?`;
+    : `${repeat}Send ${repeat?"it again ":"this email "}to ${x.email}${cc?`\nCC: ${cc}`:""}?`;
   if(!confirm(ask)) return;
+  const payload={instructor_id:x.id, instructor_name:x.name, to:x.email, cc:cc?cc.split(", "):[], subject:d.subject,
+    html:emailHtml(d), text:emailText(d), subject_area:x.category, institute:x.institute, sender_name:settings().name,
+    scores:x.days.map(dy=>`${dShort(dy.date)}: ${dy.avg==null?"–":dy.avg.toFixed(2)}`).join(", "), force:!!prev};
   state.sending[id]=true; render();
   try{
-    const r=await fetch("/api/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-      instructor_id:x.id, instructor_name:x.name, to:x.email, cc:cc?cc.split(", "):[], subject:d.subject,
-      html:emailHtml(d), text:emailText(d)})});
-    const j=await r.json().catch(()=>({error:`The server returned an error (${r.status}).`}));
+    let r=await fetch("/api/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    let j=await r.json().catch(()=>({error:`The server returned an error (${r.status}).`}));
+    if(r.status===409&&j.duplicate){
+      // the sheet knows about an email this page didn't: ask before sending again
+      const when=j.last_sent?dayLabel(new Date(j.last_sent)):"recently";
+      if(!confirm(`${x.name} was already emailed on ${when}, within the last ${j.repeat_days||7} days.\n\nSend it again anyway?`)){
+        delete state.sending[id]; await loadSentLog(); return; }
+      r=await fetch("/api/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...payload,force:true})});
+      j=await r.json().catch(()=>({error:`The server returned an error (${r.status}).`}));
+    }
     if(!r.ok||j.error) throw new Error(j.error||`The server returned an error (${r.status}).`);
-    state.sent[id]=new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"});
-    toast(j.test?`Test email sent to ${j.to}`:`Email sent to ${x.name}`);
+    const t=new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"});
+    if(!j.dry_run) state.sent[id]=j.test?`Test sent ${t}`:`Sent ${t}`;
+    if(!j.dry_run&&!j.test&&state.history) state.history.byId.set(normId(x.id),new Date());
+    toast(j.dry_run?`Dry run OK: ${via} received the email. Nothing was sent.`
+      : j.test?`Test email sent to ${j.to}`:`Email sent to ${x.name}`);
   }catch(e){ toast(e.message); }
   delete state.sending[id]; render();
 }

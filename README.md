@@ -17,6 +17,7 @@ fails, a rule-based draft is always available.
 - `rubrics.py` – reads the rubric workbook and pulls sub-rubric definitions and score bands
 - `llm.py` – writes the email with OpenAI gpt-4o-mini (default) or Claude, and checks the numbers it used
 - `templates/index.html` – the page
+- `google_apps_script/Code.gs` – the Google Apps Script that sends emails from Gmail and logs them in a Google Sheet (setup: `GOOGLE_SHEETS.md`)
 - `rubrics/Updated_Rubrics_and_Scoring.xlsx` – the rubric workbook the AI uses
 - `capability_managers.xlsx` – capability manager names and emails (columns `Capability Manager Name`, `Capability Manager Email`). To change it, edit the file and push
 
@@ -37,13 +38,20 @@ fails, a rule-based draft is always available.
      `capability_managers.xlsx`. If none matches, the export's `capability_manager_email` column is used
    - `CC_ALLOWED_DOMAINS` – optional, defaults to `nxtwave.co.in,nxtwave.tech`. Capability-manager addresses
      outside these domains are shown on the page but not CC'd
-   - `SEND_API_URL` – optional; the Power Automate flow the **Send** button uses (see
-     `POWER_AUTOMATE.md`). The app POSTs JSON `{to, cc, subject, html, text, instructor_id,
-     instructor_name, test}`; `to` and `cc` are `;`-separated. `SEND_API_TOKEN`, if set, goes in an
-     `Authorization: Bearer` header. Until it's set, Send says sending isn't set up and Copy email still works
-   - `SEND_MODE` – `test` (default) or `live`. In test mode every email goes only to `SEND_TEST_TO`,
-     with no CC, `[TEST]` in the subject and a note of who it would have gone to
-   - `SEND_TEST_TO` – the address(es) that receive emails in test mode (required for test mode)
+   - `SEND_API_URL` – optional; where the **Send** button sends the email. Recommended: the Google Apps
+     Script web app (`GOOGLE_SHEETS.md`), which sends from Gmail, logs every email in a Google Sheet and
+     refuses repeat emails. A Power Automate flow (`POWER_AUTOMATE.md`) also works. The app POSTs JSON
+     `{to, cc, subject, html, text, instructor_id, instructor_name, instructor_email, subject_area,
+     institute, scores, sender_name, test, dry_run, force, repeat_days, secret}`; `to` and `cc` are
+     `;`-separated. `SEND_API_TOKEN`, if set, goes in an `Authorization: Bearer` header (Power Automate).
+     Until it's set, Send says sending isn't set up and Copy email still works
+   - `SEND_SECRET` – required for Google Sheets: the same value as the script's `SECRET` property
+   - `SEND_REPEAT_DAYS` – optional, default `7`. A live email to an instructor already emailed (live) in
+     this many days is refused by the script until it's confirmed on the page
+   - `SEND_MODE` – `dryrun` (default), `test` or `live`. Dry run sends the request with
+     `dry_run: true` and no email is sent (for testing the connection). In test mode every email
+     goes only to `SEND_TEST_TO`, with no CC, `[TEST]` in the subject and a note of who it would have gone to
+   - `SEND_TEST_TO` – the address(es) that receive emails in test mode (required for test mode only)
    - `APP_PASSWORD` – optional but recommended; the browser will ask for it (any username)
    - To use Claude instead: `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`; `ANTHROPIC_MODEL` is optional and defaults to `claude-haiku-5-5`
 5. Deploy and open the URL.

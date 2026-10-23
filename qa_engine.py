@@ -258,6 +258,8 @@ def range_label(dates, long=False):
         return "the last three days"
     a, b = ds[0], ds[-1]
     M = MONTHS_L if long else MONTHS
+    if a == b:
+        return f"{b.day} {M[b.month - 1]}"
     if a.month == b.month:
         return f"{a.day}–{b.day} {M[b.month - 1]}"
     return f"{a.day} {M[a.month - 1]}–{b.day} {M[b.month - 1]}"
@@ -471,7 +473,8 @@ def build_plan(inst: dict, S: dict) -> dict:
     c_all = [e["scores"][CONDUCT] for e in inst["evid"] if e["scores"].get(CONDUCT) is not None]
     if c_all:
         if min(c_all) >= 9:
-            W.append(f"Professional Conduct is {fr(min(c_all))}–{fr(max(c_all))} in every session.")
+            W.append(f"Professional Conduct is {fr(min(c_all))} in your session." if len(c_all) == 1 else
+                     f"Professional Conduct is {fr(min(c_all))}–{fr(max(c_all))} in every session.")
         elif sum(v >= 9 for v in c_all) / len(c_all) >= 0.7:
             W.append("Your Professional Conduct scores are strong in almost every session.")
     if best:
@@ -567,7 +570,7 @@ def baseline_email(inst: dict, S: dict) -> dict:
     for d in P["days"]:
         L.append(f"- {d['date']}: no evaluated sessions" if d["avg"] is None
                  else f"- {d['date']}: {d['avg']} ({d['sessions']} session{'' if d['sessions'] == 1 else 's'})")
-    if P["overall"]:
+    if P["overall"] and P["session_count"] > 1:
         L.append(f"- Average across all {P['session_count']} sessions: {P['overall']}")
     L.append("")
     if P["working"]:

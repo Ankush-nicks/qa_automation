@@ -36,21 +36,27 @@ def read_roster(data: bytes) -> pd.DataFrame | None:
     return None
 
 
+def split_cc(raw: str) -> tuple[list[str], list[str]]:
+    """Splits a capability_manager_email cell into (company addresses to CC, external addresses left out)."""
+    domains = allowed_domains()
+    emails = list(dict.fromkeys(e.lower() for e in EMAIL.findall(raw or "")))
+    ok = [e for e in emails if e.split("@")[1] in domains]
+    return ok, [e for e in emails if e not in ok]
+
+
 def parse_roster(df: pd.DataFrame) -> dict:
     """Returns {"entries": [...], "count": n}. Each entry has the instructor's id and email,
     the capability manager name(s), the addresses to CC, and any external addresses left out."""
-    domains = allowed_domains()
     entries = []
     for r in df.to_dict(orient="records"):
-        emails = list(dict.fromkeys(e.lower() for e in EMAIL.findall(r.get("capability_manager_email") or "")))
-        if not emails:
+        ok, external = split_cc(r.get("capability_manager_email") or "")
+        if not ok and not external:
             continue
-        ok = [e for e in emails if e.split("@")[1] in domains]
         entries.append({
             "id": norm_id(r.get("instructor_user_id")),
             "email": (r.get("instructor_email") or "").strip().lower(),
             "name": (r.get("capability_manager_name") or "").strip(),
             "cc": ok,
-            "external": [e for e in emails if e not in ok],
+            "external": external,
         })
     return {"entries": entries, "count": len(entries), "rows": len(df)}

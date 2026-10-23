@@ -268,7 +268,7 @@ function setRoster(r,save){
   $("rosterStatus").textContent=`Roster: ${r.file} (${r.count} instructors with a capability manager)`;
 }
 try{ const r=JSON.parse(localStorage.getItem("qa.roster")||"null"); if(r&&r.entries) setRoster(r,false); }catch(_){}
-const capMgr=x=>roster&&(roster.byId.get(normId(x.id))||roster.byEmail.get(String(x.email||"").toLowerCase()))||null;
+const capMgr=x=>x.capmgr||roster&&(roster.byId.get(normId(x.id))||roster.byEmail.get(String(x.email||"").toLowerCase()))||null;
 const ccFor=x=>{ const m=capMgr(x); const all=[...ccList().split(", "),...(m?m.cc:[])].filter(Boolean);
   const seen=new Set(); return all.filter(e=>{ const k=e.toLowerCase(); if(seen.has(k)) return false; seen.add(k); return true; }).join(", "); };
 function settings(){

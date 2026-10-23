@@ -15,7 +15,7 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 
 import llm
 from qa_engine import analyze, read_export
-from roster import parse_roster, read_roster
+from roster import parse_roster, read_roster, split_cc
 from rubrics import RubricBook
 
 BASE = Path(__file__).parent
@@ -112,6 +112,13 @@ def api_analyze():
         S = parse_settings(json.loads(request.form.get("settings") or "{}"))
         df = read_export(data, f.filename)
         out = analyze(df, S)
+        if "capability_manager_email" in df.columns:  # newer exports carry the manager emails themselves
+            rows = {str(r.get("instructor_user_id") or i): r for i, r in enumerate(df.to_dict(orient="records"))}
+            for x in out["instructors"]:
+                r = rows.get(x["id"], {})
+                cc, external = split_cc(r.get("capability_manager_email") or "")
+                if cc or external:
+                    x["capmgr"] = {"name": (r.get("capability_manager_name") or "").strip(), "cc": cc, "external": external}
     except ValueError as e:
         roster = read_roster(data)  # the roster export dropped in the wrong box
         if roster is not None:

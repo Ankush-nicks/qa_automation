@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>QA email drafts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+:root{
+  --paper:#F5F6FA; --surface:#FFFFFF; --ink:#18213F; --muted:#59627A; --line:#DCE0EA;
+  --accent:#2B3F8F; --accent-ink:#FFFFFF; --accent-tint:#E8ECF8;
+  --low:#B3261E; --low-bg:#FBE8E6; --mid:#7E5300; --mid-bg:#FCEFD3; --ok:#1E6A49; --ok-bg:#E1F1E8; --none-bg:#ECEEF3;
+  --letter:#FFFFFF; --rule:#B3261E;
+  color-scheme: light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#11152A; --surface:#191E35; --ink:#E6E9F3; --muted:#A0A7BC; --line:#2D3450;
+    --accent:#93A7F2; --accent-ink:#11152A; --accent-tint:#252D52;
+    --low:#FF8F85; --low-bg:#3B1E24; --mid:#F1C266; --mid-bg:#3A2F17; --ok:#7ED0A6; --ok-bg:#163327; --none-bg:#242A43;
+    --letter:#1D2340; --rule:#FF8F85;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#11152A; --surface:#191E35; --ink:#E6E9F3; --muted:#A0A7BC; --line:#2D3450;
+  --accent:#93A7F2; --accent-ink:#11152A; --accent-tint:#252D52;
+  --low:#FF8F85; --low-bg:#3B1E24; --mid:#F1C266; --mid-bg:#3A2F17; --ok:#7ED0A6; --ok-bg:#163327; --none-bg:#242A43;
+  --letter:#1D2340; --rule:#FF8F85;
+  color-scheme: dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 "Public Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1280px;margin:0 auto;padding:28px 20px 56px}
+header.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;margin-bottom:20px}
+h1{font-size:28px;line-height:1.15;margin:0;font-weight:700;letter-spacing:-0.015em}
+.sub{margin:6px 0 0;color:var(--muted);max-width:62ch}
+.btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);padding:9px 16px;border-radius:8px;font-weight:600;cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn.small{padding:6px 12px;font-size:14px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+
+/* Empty state */
+.drop{border:2px dashed var(--line);border-radius:14px;background:var(--surface);padding:56px 24px;text-align:center;transition:border-color .15s,background .15s}
+.drop.over{border-color:var(--accent);background:var(--accent-tint)}
+.drop h2{margin:0 0 6px;font-size:22px;font-weight:600}
+.drop p{margin:0 auto 18px;color:var(--muted);max-width:56ch}
+.drop .fine{font-size:13px;margin-top:18px;margin-bottom:0}
+.err{margin-top:16px;padding:12px 14px;border-radius:8px;background:var(--low-bg);color:var(--low);display:none;text-align:left}
+
+/* Settings */
+.settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px 16px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.field label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.field input,.field select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--paper)}
+.field.check{display:flex;align-items:center;gap:8px;padding-top:22px}
+.field.check label{margin:0;color:var(--ink);font-weight:500}
+.field.check input{width:auto;margin:0}
+.field.check label{white-space:nowrap}
+.summary{margin:0 0 16px;font-size:16px}
+.summary b{font-weight:700}
+.filebar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;color:var(--muted);font-size:14px;min-width:0}
+.filebar span{overflow-wrap:anywhere}
+
+/* Main layout */
+.main{display:grid;grid-template-columns:350px minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:900px){.main{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.listpanel{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);display:flex;flex-direction:column;max-height:calc(100vh - 24px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}
+@media (max-width:900px){.listpanel{position:static;max-height:none}}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;padding:12px 12px 0}
+.tab{border:1px solid var(--line);background:transparent;border-radius:999px;padding:5px 12px;font-size:14px;cursor:pointer}
+.tab[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.listtools{display:flex;gap:8px;padding:12px;border-bottom:1px solid var(--line)}
+.listtools input{flex:1;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:var(--paper)}
+.list{list-style:none;margin:0;padding:0;overflow:auto}
+@media (max-width:900px){.list{max-height:420px}}
+.item{display:flex;gap:12px;justify-content:space-between;align-items:center;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--line);padding:11px 14px;cursor:pointer}
+.item:hover{background:var(--accent-tint)}
+.item[aria-current="true"]{background:var(--accent-tint);box-shadow:inset 3px 0 0 var(--accent)}
+.item .nm{font-weight:600;display:block;line-height:1.3}
+.item .mt{font-size:13px;color:var(--muted);display:block;line-height:1.35}
+.strip{display:flex;gap:3px;flex:none}
+.cell{width:38px;text-align:center;font-size:12.5px;font-weight:600;border-radius:5px;padding:3px 0;font-variant-numeric:tabular-nums}
+.lo{background:var(--low-bg);color:var(--low)}
+.md{background:var(--mid-bg);color:var(--mid)}
+.hi{background:var(--ok-bg);color:var(--ok)}
+.na{background:var(--none-bg);color:var(--muted)}
+.emptylist{padding:24px 16px;color:var(--muted)}
+
+/* Detail */
+.detail{padding:22px}
+.dhead{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;align-items:flex-start}
+.dhead h2{margin:0;font-size:24px;line-height:1.2;letter-spacing:-0.01em}
+.dhead .meta{color:var(--muted);font-size:14px;margin-top:4px}
+.badge{display:inline-block;font-size:12.5px;font-weight:600;padding:2px 9px;border-radius:999px;margin-left:8px;vertical-align:middle}
+
+/* Signature: three-day marks against the threshold line */
+.marks{position:relative;display:grid;grid-template-columns:repeat(3,72px);column-gap:14px;flex:none;padding-right:34px}
+.mcol{display:flex;flex-direction:column;align-items:center}
+.mval{height:30px;font-size:22px;font-weight:700;line-height:30px;font-variant-numeric:tabular-nums}
+.mtrack{position:relative;width:100%;height:110px;background:var(--none-bg);border-radius:6px}
+.mbar{position:absolute;left:0;right:0;bottom:0;border-radius:6px}
+.mbar.lo{background:var(--low)}.mbar.md{background:var(--mid)}.mbar.hi{background:var(--ok)}
+.mday{font-size:12.5px;color:var(--muted);margin-top:6px}
+.mplot{position:absolute;left:-6px;right:0;top:30px;height:110px;pointer-events:none}
+.tline{position:absolute;left:0;right:30px;border-top:2px dashed var(--ink)}
+.tlabel{position:absolute;right:0;transform:translateY(50%);font-size:12px;color:var(--ink);font-weight:700;width:28px;text-align:left}
+
+h3{font-size:17px;margin:26px 0 10px;font-weight:700}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:13px;background:var(--paper)}
+tr:last-child td{border-bottom:0}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.score{display:inline-block;min-width:44px;text-align:center;border-radius:5px;padding:1px 6px;font-weight:600;font-variant-numeric:tabular-nums}
+.typerow td{background:var(--paper);font-weight:600}
+.notes{border-left:4px solid var(--mid);background:var(--mid-bg);color:var(--ink);border-radius:0 10px 10px 0;padding:12px 16px}
+.notes ul{margin:0;padding-left:18px}
+.notes li+li{margin-top:6px}
+
+/* Letter */
+.letterhead{display:grid;grid-template-columns:70px 1fr;gap:8px 10px;align-items:center;margin-bottom:10px}
+.letterhead label{font-size:13px;font-weight:600;color:var(--muted)}
+.letterhead input{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--paper)}
+.letter{width:100%;min-height:520px;resize:vertical;border:1px solid var(--line);border-radius:10px;background:var(--letter);padding:20px 22px;font:16px/1.65 "Source Serif 4",Georgia,"Times New Roman",serif}
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;align-items:center}
+.edited{font-size:13px;color:var(--muted)}
+.placeholder{padding:48px 24px;color:var(--muted);text-align:center}
+
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:8px;font-weight:600;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;z-index:20}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media (prefers-reduced-motion:reduce){.toast,.drop{transition:none}}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>QA email drafts</h1>
+      <p class="sub">Upload the 3-day instructor QA export. Instructors who meet your rule get an email with their scores, rubric insights, action items and next steps, ready to copy.</p>
+    </div>
+    <div class="filebar hidden" id="filebar">
+      <span id="fileName"></span>
+      <label class="btn ghost small" for="fileInput2">Replace file</label>
+      <input type="file" id="fileInput2" accept=".csv,text/csv">
+    </div>
+  </header>
+
+  <section class="drop" id="drop">
+    <h2>Drop the QA export here</h2>
+    <p>Use the CSV with day-wise averages, <code>qa_reports_json</code> and <code>session_rubric_evidence_json</code> columns. Both lecture and practice sessions are counted.</p>
+    <label class="btn" for="fileInput">Choose CSV file</label>
+    <input type="file" id="fileInput" accept=".csv,text/csv">
+    <p class="fine">The file is read in your browser and isn’t uploaded anywhere.</p>
+    <div class="err" id="err" role="alert"></div>
+  </section>
+
+  <section id="app" class="hidden">
+    <div class="settings" id="settings">
+      <div class="field"><label for="sThr">Score threshold</label><input id="sThr" type="number" step="0.1" min="0" max="10" value="5"></div>
+      <div class="field"><label for="sRule">At or below threshold on</label>
+        <select id="sRule">
+          <option value="all3">All 3 days</option>
+          <option value="available">Every day with sessions</option>
+          <option value="avg3">3-day average</option>
+        </select></div>
+      <div class="field"><label for="sGoal">Target by review date</label><input id="sGoal" type="number" step="0.1" min="0" max="10" value="6"></div>
+      <div class="field"><label for="sCall">Coaching call</label><input id="sCall" type="date"></div>
+      <div class="field"><label for="sReview">Review date</label><input id="sReview" type="date"></div>
+      <div class="field"><label for="sName">Sign off as</label><input id="sName" type="text" value="[Your Name]"></div>
+      <div class="field check"><input id="sPlan" type="checkbox" checked><label for="sPlan">Mention improvement plan</label></div>
+    </div>
+
+    <p class="summary" id="summary"></p>
+
+    <div class="main">
+      <aside class="panel listpanel" aria-label="Instructors">
+        <div class="tabs" role="group" aria-label="Filter instructors" id="tabs"></div>
+        <div class="listtools">
+          <input type="search" id="search" placeholder="Search name, institute or email" aria-label="Search instructors">
+          <button class="btn small ghost" id="copyAll" title="Copy every flagged email">Copy all</button>
+        </div>
+        <ul class="list" id="list"></ul>
+      </aside>
+      <main class="panel" id="detail"><div class="placeholder">Select an instructor to see their scores and email.</div></main>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script id="core">
+/* ---------- Rubric knowledge (from the updated rubrics workbook) ---------- */
+const CONDUCT = "professional conduct and ethics";
+const LECT_KEYS = ["curriculum alignment and content accuracy","pedagogical quality","language","student engagement"];
+const PRAC_KEYS = ["process adherence","clarity and communication","pedagogical support and guidance","student engagement and independence","doubt resolution and practice session facilitation"];
+const TYPE_ORDER = ["Lecture","Practice","Invigilation","Revision","Other"];
+const TYPE_HEAD = {
+  Lecture:"Lecture-format sessions (scored on the lecture rubric):",
+  Practice:"Practice sessions (scored on the practice rubric):",
+  Invigilation:"Invigilation sessions:",
+  Revision:"Revision sessions:",
+  Other:"Other sessions:"
+};
+const WEIGHTS = {
+  Lecture:{"curriculum alignment and content accuracy":.3,"pedagogical quality":.3,"language":.15,"student engagement":.15,[CONDUCT]:.1},
+  Practice:{"process adherence":.3,"clarity and communication":.3,"pedagogical support and guidance":.2,"student engagement and independence":.1,"doubt resolution and practice session facilitation":.5},
+  Invigilation:{"invigilation and environment control":.5,[CONDUCT]:.5}
+};
+const isTechLike = c => ["TECH","APTITUDE"].includes(String(c||"").toUpperCase());
+
+const KB = {
+  "curriculum alignment and content accuracy": {
+    label:"Curriculum Alignment & Content Accuracy",
+    insight:(s)=> s.mean < 3 ? "The planned topics were largely not covered, or not covered in sequence." : "Parts of the planned content were skipped or covered out of order.",
+    actions:()=>["Before every session, go through the session plan and list the core topics or tasks, with a time allocation for each. Covering every core topic in order is what moves Curriculum Alignment into the 6+ band.",
+                 "Use at least one relevant example for every concept you teach, and keep any off-topic discussion short."]
+  },
+  "pedagogical quality": {
+    label:"Pedagogical Quality",
+    insight:(s,c)=> isTechLike(c) ? "Explanation clarity, pacing and delivery need attention, including fewer filler words." : "Explanation clarity, checks for understanding and pacing all need attention.",
+    actions:(c)=> isTechLike(c)
+      ? ["Open with the agenda and close with a 2-minute recap of what was covered.",
+         "Explain step by step, slow down on the harder parts, and cut filler words like “so” and “basically”."]
+      : ["Open with the agenda and close with a 2-minute recap of what was covered.",
+         "After each concept, add one quick check, such as a poll, a quiz question or a short problem to solve."]
+  },
+  "language": {
+    label:"Language",
+    insight:(s,c)=> isTechLike(c) ? "Teaching should stay in English, with explanations clearly anchored to what’s on screen and a patient tone when handling doubts." : "There’s room to improve on sentence length, grammar and filler words.",
+    actions:(c)=> isTechLike(c)
+      ? ["Deliver all explanations and doubt-resolution in English; a quick translation of a single term is fine.",
+         "Anchor explanations to the screen with specific references, like “look at line 14” or “the left column of this slide”."]
+      : ["On language, aim for shorter sentences (around 15 words), fewer fillers, and a short definition for every new term."]
+  },
+  "student engagement": {
+    label:"Student Engagement",
+    insight:(s,c)=> isTechLike(c) ? "Comprehension checks were limited, and students weren’t regularly asked to respond, attempt problems or explain back." : "There were few open questions, little student talk time and limited acknowledgment of student answers.",
+    actions:(c)=> isTechLike(c)
+      ? ["Check understanding at every key point with a real question, such as asking a student to predict an output or explain a step back, and use the answer to decide whether to re-explain.",
+         "Check in with every part of the room, not just the front rows."]
+      : ["Ask at least 6–7 open questions per 15 minutes rather than “okay?” or “got it?”. Wait about 3 seconds for answers, and acknowledge or build on each response."]
+  },
+  "doubt resolution and practice session facilitation": {
+    label:"Doubt Resolution & Practice Facilitation",
+    insight:(s)=> s.mean <= 1 ? "Almost no facilitation was picked up: no agenda, doubt checks or responses to students." : "Explanations of student doubts and the facilitation of the practice need to be clearer and more active.",
+    actions:()=>["Open each practice with a short agenda: the task, the time available and how to ask for help.",
+                 "Run regular doubt checks during the practice and explain common blockers to the whole class.",
+                 "Keep the session on the practice task and avoid long non-academic conversations."]
+  },
+  "invigilation and environment control": {
+    label:"Invigilation & Environment Control",
+    insight:()=> "Baseline exam duties (start announcement, time reminders, submission instructions) and support during the exam need to be consistent.",
+    actions:()=>["In every exam, cover the start announcement, time reminders and submission instructions, and help with technical issues without giving content help."]
+  },
+  "process adherence": {
+    label:"Process Adherence",
+    insight:()=> "The expected practical flow of opening brief, clear instructions, time checks and wrap-up isn’t being followed consistently.",
+    actions:()=>["Use a fixed structure for every practical: a 3–5 minute brief (objective, task, time available, how to submit), working time with time checks at the halfway point and 5 minutes before the end, and a 5-minute wrap-up covering common errors and the answers."]
+  },
+  "clarity and communication": {
+    label:"Clarity & Communication",
+    insight:()=> "Instructions and explanations aren’t consistently clear from session to session.",
+    actions:()=>["Give instructions in short, simple steps and confirm understanding, for example “Can someone tell me what we’re doing in step 2?”"]
+  },
+  "pedagogical support and guidance": {
+    label:"Pedagogical Support & Guidance",
+    insight:(s)=> s.mean < 1.5 ? "Students working on tasks were not being guided or given feedback when stuck." : "Students aren’t getting enough help or feedback when they’re stuck.",
+    actions:()=>["Circulate during working time and check in with every student or group at least once, starting with those who haven’t begun.",
+                 "When a student is stuck, give a hint or a guiding question before giving the answer, then check that they can do the next one on their own."]
+  },
+  "student engagement and independence": {
+    label:"Student Engagement & Independence",
+    insight:()=> "Students aren’t being pushed to attempt tasks on their own and then check back.",
+    actions:()=>["Ask students to attempt each task on their own first, then share and compare answers before you explain."]
+  },
+  "revision session quality": {
+    label:"Revision Session Quality",
+    insight:()=> "The revision didn’t consistently reinforce the key points.",
+    actions:()=>["Plan revision around the topics students found hardest, and use quick questions to check recall."]
+  },
+  [CONDUCT]: { label:"Professional Conduct", insight:()=>"", actions:()=>[] }
+};
+function kb(key){
+  return KB[key] || { label: key.replace(/\b\w/g, m=>m.toUpperCase()), insight:()=> "This category scored below the expected band.", actions:()=>[] };
+}
+
+/* ---------- Helpers ---------- */
+function num(v){ if(v===undefined||v===null) return null; const s=String(v).trim(); if(s===""||s.toLowerCase()==="nan"||s.toLowerCase()==="null") return null; const n=parseFloat(s); return isNaN(n)?null:n; }
+function safeJSON(s, fb){ if(s===undefined||s===null||s==="") return fb; try{ const v=JSON.parse(s); return v==null?fb:v; }catch(e){ return fb; } }
+const arr = v => Array.isArray(v)?v:[];
+const mean = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
+const f2 = v => v==null ? "–" : v.toFixed(2);
+const f1 = v => v==null ? "–" : v.toFixed(1);
+const fr = v => v%1===0 ? v.toFixed(1) : String(Number(v.toFixed(2)));
+const fT = v => String(Number(Number(v).toFixed(2)));
+const normId = s => String(s||"").replace(/-/g,"").toLowerCase();
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTHS_L = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const WD = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+function pd(s){ if(!s) return null; const m=String(s).match(/^(\d{4})-(\d{2})-(\d{2})/); return m? new Date(+m[1],+m[2]-1,+m[3]) : null; }
+function dShort(s){ const d=pd(s); return d? `${d.getDate()} ${MONTHS[d.getMonth()]}` : (s||""); }
+function dLong(s){ const d=pd(s); return d? `${WD[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}` : (s||""); }
+function wday(s){ const d=pd(s); return d? WD[d.getDay()] : ""; }
+function iso(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function tShort(dt){ const m=String(dt||"").match(/T(\d{2}):(\d{2})/); if(!m) return ""; let h=+m[1]; const ap=h>=12?"PM":"AM"; h=h%12||12; return `${h}:${m[2]} ${ap}`; }
+function rangeLabel(dates, long){
+  const ds=dates.map(pd).filter(Boolean); if(!ds.length) return "the last three days";
+  const a=ds[0], b=ds[ds.length-1], M = long?MONTHS_L:MONTHS;
+  if(a.getMonth()===b.getMonth()) return `${a.getDate()}–${b.getDate()} ${M[b.getMonth()]}`;
+  return `${a.getDate()} ${M[a.getMonth()]}–${b.getDate()} ${M[b.getMonth()]}`;
+}
+function firstName(name){
+  let f=String(name||"").trim().split(/\s+/)[0]||"there";
+  if(f.includes(".")) f=f.split(".").filter(Boolean).pop()||f;
+  if(f===f.toUpperCase()) f=f.charAt(0)+f.slice(1).toLowerCase();
+  return f;
+}
+function classify(keys){
+  if(keys.some(k=>LECT_KEYS.includes(k))) return "Lecture";
+  if(keys.some(k=>PRAC_KEYS.includes(k))) return "Practice";
+  if(keys.includes("invigilation and environment control")) return "Invigilation";
+  if(keys.includes("revision session quality")) return "Revision";
+  return "Other";
+}
+function joinAnd(list){ if(list.length<=1) return list.join(""); return list.slice(0,-1).join(", ")+" and "+list[list.length-1]; }
+
+/* ---------- Build instructor model from a CSV row ---------- */
+function buildInst(r, idx){
+  const days=[1,2,3].map(i=>({date:r[`day${i}_date`]||null, avg:num(r[`day${i}_average`]), count:num(r[`day${i}_evaluation_count`])||0}));
+  const qa=arr(safeJSON(r.qa_reports_json,[]));
+  const ev=arr(safeJSON(r.session_rubric_evidence_json,[]));
+  const evid=ev.map(s=>{
+    const scores={};
+    arr(s.rubric_scores).forEach(x=>{ const k=String(x.rubric_name||"").toLowerCase().trim(); const v=num(x.normalized_score ?? x.original_rubric_score); if(k && v!==null) scores[k]=v; });
+    return {date:s.session_date, start:s.session_start_datetime||"", title:s.session_title||"Untitled session", sec:normId(s.session_section_id), scores, type:classify(Object.keys(scores))};
+  }).filter(e=>Object.keys(e.scores).length);
+  const secMap={}; evid.forEach(e=>{ if(e.sec) secMap[e.sec]=e; });
+  const sessions=qa.map(q=>{
+    const e=secMap[normId(q.session_section_id)];
+    return {date:q.session_date, title:q.session_title||"Untitled session", score:num(q.final_score), start:e?e.start:"", type:e?e.type:"Unmapped"};
+  }).filter(s=>s.score!==null).sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
+  // category stats per session type
+  const stats={};
+  evid.forEach(e=>{ Object.entries(e.scores).forEach(([k,v])=>{ (stats[e.type] ||= {}); (stats[e.type][k] ||= []).push(v); }); });
+  const cat={};
+  Object.entries(stats).forEach(([t,o])=>{ cat[t]={}; Object.entries(o).forEach(([k,a])=>{ cat[t][k]={mean:mean(a),min:Math.min(...a),max:Math.max(...a),n:a.length}; }); });
+  const conductLow = evid.filter(e=>e.scores[CONDUCT]!=null && e.scores[CONDUCT]<=3.5);
+  const escalations = evid.filter(e=>e.scores[CONDUCT]!=null && e.scores[CONDUCT]<=1.0);
+  const mapIssues = evid.filter(e=>e.type==="Lecture" && /practi(ce|cal)/i.test(e.title));
+  return {
+    id:String(r.instructor_user_id||idx), name:(r.instructor_name||"Unnamed instructor").trim(), email:(r.instructor_mail||"").trim(),
+    managers:(r.instructor_manager_name||"").trim(), institute:(r.institute_name||"").trim(), category:(r.instructor_category||"").trim().toUpperCase(),
+    days, sessions, evid, cat, conductLow, escalations, mapIssues
+  };
+}
+
+/* ---------- Flag rules ---------- */
+function evaluate(inst, S){
+  const T=S.threshold, vals=inst.days.map(d=>d.avg).filter(v=>v!==null);
+  const all3 = inst.days.every(d=>d.avg!==null && d.avg<=T);
+  const avail = vals.length>=2 && vals.every(v=>v<=T);
+  const avg3 = vals.length>0 && mean(vals)<=T;
+  const flagged = S.rule==="all3"?all3 : S.rule==="available"?avail : avg3;
+  const watch = !flagged && vals.length>=2 && vals.every(v=>v<T+1);
+  return {flagged, watch, all3, avail, avg3, mean3:mean(vals)};
+}
+
+/* ---------- Email ---------- */
+function buildEmail(inst, S){
+  const T=S.threshold, ev=evaluate(inst,S), fn=firstName(inst.name);
+  const dates=inst.days.map(d=>d.date).filter(Boolean);
+  const subject=`QA Review (${rangeLabel(dates,false)}): Action plan for next week`;
+  const L=[];
+  L.push(`Hi ${fn},`,"");
+  const vals=inst.days.map(d=>d.avg).filter(v=>v!==null);
+  let reason;
+  if(ev.flagged && S.rule==="all3") reason=`Your daily average was ${vals.every(v=>v<T)?"below":"at or below"} ${fT(T)} on all three days.`;
+  else if(ev.flagged && S.rule==="available") reason=`Your daily average was at or below ${fT(T)} on every day you had evaluated sessions.`;
+  else if(ev.flagged) reason=`Your average across the three days was ${f2(ev.mean3)}, which is at or below ${fT(T)}.`;
+  else reason=`A few of your scores are below where we’d like them to be.`;
+  L.push(`I’ve gone through your QA reports for ${rangeLabel(dates,true)} against the updated rubrics. ${reason} Below is what the reports show and the plan I’d like us to agree on for next week.`,"");
+
+  // Scores
+  L.push("YOUR SCORES");
+  inst.days.forEach(d=>{ if(!d.date) return; L.push(d.avg===null ? `- ${dShort(d.date)}: no evaluated sessions` : `- ${dShort(d.date)}: ${f2(d.avg)} (${d.count} session${d.count===1?"":"s"})`); });
+  if(inst.sessions.length) L.push(`- 3-day average across all ${inst.sessions.length} sessions: ${f2(mean(inst.sessions.map(s=>s.score)))}`);
+  L.push("");
+
+  // What's working
+  const W=[];
+  const sorted=[...inst.sessions].sort((a,b)=>b.score-a.score);
+  const best=sorted.filter(s=>s.score>=5.5).slice(0,2);
+  const strong=[];
+  TYPE_ORDER.forEach(t=>{ const c=inst.cat[t]; if(!c) return; Object.entries(c).forEach(([k,s])=>{ if(k!==CONDUCT && s.mean>=6) strong.push({t,k,s}); }); });
+  strong.sort((a,b)=>b.s.mean-a.s.mean);
+  if(best.length===2) W.push(`Your strongest sessions were ${best[0].title} (${dShort(best[0].date)}, ${f2(best[0].score)}) and ${best[1].title} (${dShort(best[1].date)}, ${f2(best[1].score)}).`);
+  else if(best.length===1) W.push(`Your strongest session was ${best[0].title} on ${dShort(best[0].date)}, which scored ${f2(best[0].score)}.`);
+  else if(sorted.length) W.push(`Your highest-scoring session was ${sorted[0].title} on ${dShort(sorted[0].date)} (${f2(sorted[0].score)}).`);
+  strong.slice(0,2).forEach(x=>{ W.push(`${kb(x.k).label} is a strength in your ${x.t.toLowerCase()} sessions, averaging ${f1(x.s.mean)}${x.s.n>1?` (${fr(x.s.min)}–${fr(x.s.max)})`:""}.`); });
+  const cAll=inst.evid.map(e=>e.scores[CONDUCT]).filter(v=>v!=null);
+  if(cAll.length){
+    const mn=Math.min(...cAll), mx=Math.max(...cAll), good=cAll.filter(v=>v>=9).length;
+    if(mn>=9) W.push(`Professional Conduct is ${fr(mn)}–${fr(mx)} in every session.`);
+    else if(good/cAll.length>=0.7) W.push(`Your Professional Conduct scores are strong in almost every session.`);
+  }
+  if(best.length) W.push("That’s the baseline to build from.");
+  if(W.length){ L.push("WHAT’S WORKING", W.join(" "), ""); }
+
+  // Insights
+  L.push("KEY INSIGHTS");
+  const weak=[];
+  TYPE_ORDER.forEach(t=>{ const c=inst.cat[t]; if(!c) return;
+    Object.entries(c).forEach(([k,s])=>{ if(k===CONDUCT) return; if(s.mean<T){ const w=(WEIGHTS[t]||{})[k]; weak.push({t,k,s,w,impact:(w||0.15)*(10-s.mean)}); } });
+  });
+  let fallback=false;
+  if(!weak.length){
+    // nothing under threshold: take the two lowest non-conduct categories
+    const all=[]; TYPE_ORDER.forEach(t=>{ const c=inst.cat[t]; if(!c) return; Object.entries(c).forEach(([k,s])=>{ if(k!==CONDUCT){ const w=(WEIGHTS[t]||{})[k]; all.push({t,k,s,w,impact:(w||0.15)*(10-s.mean)}); } }); });
+    all.sort((a,b)=>a.s.mean-b.s.mean); weak.push(...all.slice(0,2)); fallback=true;
+  }
+  const top = [...weak].sort((a,b)=>b.impact-a.impact)[0];
+  let n=1;
+  TYPE_ORDER.forEach(t=>{
+    const items=weak.filter(x=>x.t===t).sort((a,b)=>b.impact-a.impact); if(!items.length) return;
+    L.push(TYPE_HEAD[t]);
+    items.forEach(x=>{
+      const K=kb(x.k);
+      let line=`${n++}. ${K.label}: average ${f1(x.s.mean)}`;
+      if(x.s.n>1) line+=`, range ${fr(x.s.min)}–${fr(x.s.max)}`;
+      if(x.w) line+=` (${Math.round(x.w*100)}% weight)`;
+      line+=`. ${K.insight(x.s, inst.category)}`;
+      const vlow=(inst.evid.filter(e=>e.type===t).map(e=>e.scores[x.k]).filter(v=>v!=null&&v<=1)).length;
+      if(x.s.n>=3 && vlow>=2) line+=` ${vlow} of ${x.s.n} sessions scored 1.0 or below.`;
+      if(x===top && !fallback && weak.length>1) line+=" This is the biggest drag on your overall score.";
+      L.push(line);
+    });
+    L.push("");
+  });
+  // trend
+  const dd=inst.days.filter(d=>d.avg!==null);
+  if(dd.length>=2){
+    const hi=dd.reduce((a,b)=>b.avg>a.avg?b:a), lo=dd.reduce((a,b)=>b.avg<a.avg?b:a);
+    const lowSess=sorted[sorted.length-1];
+    let tr=`Trend: ${dShort(hi.date)} was your best day (${f2(hi.avg)}) and ${dShort(lo.date)} your lowest (${f2(lo.avg)}).`;
+    if(lowSess) tr+=` Your lowest-scoring session was ${lowSess.title} on ${dShort(lowSess.date)} (${f2(lowSess.score)}).`;
+    L.push(tr,"");
+  }
+  if(inst.conductLow.length){
+    const items=inst.conductLow.map(e=>`${e.title} (${dShort(e.date)}${tShort(e.start)?", "+tShort(e.start):""}) received a Professional Conduct score of ${fr(e.scores[CONDUCT])}`);
+    L.push(`One more point: ${joinAnd(items)}, which is well below the expected level. I’d like us to review ${items.length>1?"those recordings":"that recording"} together so we understand what happened.`,"");
+  }
+
+  // Actions
+  L.push("ACTION ITEMS");
+  const acts=[]; const seen=new Set();
+  [...weak].sort((a,b)=>b.impact-a.impact).forEach(x=>{ kb(x.k).actions(inst.category).forEach(a=>{ if(!seen.has(a)){ seen.add(a); acts.push(a); } }); });
+  const subj={TECH:"Tech",ENGLISH:"English",MATH:"Math",APTITUDE:"Aptitude"}[inst.category]||"";
+  const trimmed=acts.slice(0,7);
+  trimmed.push(`Observe one session by a high-scoring ${subj?subj+" ":""}trainer this week.`);
+  trimmed.forEach((a,i)=>L.push(`${i+1}. ${a}`));
+  L.push("");
+
+  // Support
+  const recs=[]; const rk=new Set();
+  inst.conductLow.forEach(e=>{ const key=e.title+e.date; if(!rk.has(key)){ rk.add(key); recs.push(`${e.title} from ${dShort(e.date)}`); } });
+  [...inst.sessions].sort((a,b)=>a.score-b.score).forEach(s=>{ const key=s.title+s.date; if(recs.length<2 && s.score<T+1 && !rk.has(key)){ rk.add(key); recs.push(`${s.title} from ${dShort(s.date)}`); } });
+  const r2=recs.slice(0,2);
+  L.push("SUPPORT FROM OUR SIDE");
+  L.push(r2.length===2 ? `- A 1:1 coaching call on ${dLong(S.call)}, to walk through two recordings: ${r2[0]} and ${r2[1]}.` : r2.length===1 ? `- A 1:1 coaching call on ${dLong(S.call)}, to walk through your ${r2[0]} recording.` : `- A 1:1 coaching call on ${dLong(S.call)}.`);
+  L.push("- Daily QA score check-ins through next week.","");
+
+  // Outcome
+  L.push("EXPECTED OUTCOME AND NEXT STEPS");
+  L.push(`- Target: a daily average above ${fT(T)} every day next week, reaching ${fT(S.goal)}+ by ${dLong(S.review)}.`);
+  const tops=[...weak].sort((a,b)=>b.impact-a.impact).map(x=>kb(x.k).label).filter((v,i,a)=>a.indexOf(v)===i).slice(0,2);
+  if(tops.length===2) L.push(`- ${tops[0]} and ${tops[1]} should each reach at least ${fT(Math.max(T,5))}.`);
+  else if(tops.length===1) L.push(`- ${tops[0]} should reach at least ${fT(Math.max(T,5))}.`);
+  L.push(`- We’ll review progress together on ${dLong(S.review)}.${S.plan?` If scores are still at or below ${fT(T)}, we’ll move to a structured improvement plan with your manager.`:""}`,"");
+
+  const hasPrac=!!inst.cat.Practice;
+  L.push(`Please reply with a slot that works for ${wday(S.call)}’s call. Also let me know if anything about the ${hasPrac?"practical setup (lab access, batch size or materials)":"session setup (slides, batch or schedule)"} is getting in the way, so we can fix that from our side too.`,"");
+  L.push("Regards,", S.name||"[Your Name]");
+  return {subject, body:L.join("\n")};
+}
+
+/* ---------- Internal notes (not in the email) ---------- */
+function internalNotes(inst){
+  const N=[];
+  inst.escalations.forEach(e=>{
+    const others=Object.entries(e.scores).filter(([k])=>k!==CONDUCT).map(([,v])=>v);
+    const allZero=others.length && others.every(v=>v<=1);
+    N.push(`Escalation check: ${e.title} (${dShort(e.date)}) scored ${fr(e.scores[CONDUCT])} on Professional Conduct. The rubric requires escalation at 1.0 or below.${allZero?" Every other category is also near 0, which usually points to an empty recording or the instructor not being present, so check the recording first.":""}`);
+  });
+  if(inst.mapIssues.length){
+    const cnt={}; inst.mapIssues.forEach(e=>{ const k=`${e.title} (${dShort(e.date)})`; cnt[k]=(cnt[k]||0)+1; });
+    const names=Object.entries(cnt).map(([k,c])=>c>1?`${k} ×${c}`:k);
+    N.push(`Rubric mapping: ${joinAnd(names)} ${inst.mapIssues.length>1?"look like practice sessions but were":"looks like a practice session but was"} scored on the lecture rubric. Curriculum Alignment can drop close to 0 when there are no slides to cover, so confirm the mapping before sending.`);
+  }
+  return N;
+}
+if(typeof module!=="undefined") module.exports={buildInst,evaluate,buildEmail,internalNotes};
+</script>
+
+<script>
+/* ---------- UI ---------- */
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const state={insts:[],drafts:{},tab:"flagged",q:"",sel:null};
+const REQUIRED=["instructor_name","day1_average","day2_average","day3_average","qa_reports_json","session_rubric_evidence_json"];
+
+function settings(){
+  return {threshold:parseFloat($("sThr").value)||5, rule:$("sRule").value, goal:parseFloat($("sGoal").value)||6,
+          call:$("sCall").value, review:$("sReview").value, name:$("sName").value.trim(), plan:$("sPlan").checked};
+}
+function scoreClass(v,T){ if(v==null) return "na"; if(v<=T) return "lo"; if(v<T+1) return "md"; return "hi"; }
+function showErr(msg){ const e=$("err"); e.textContent=msg; e.style.display="block"; $("drop").classList.remove("hidden"); $("app").classList.add("hidden"); }
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),1800); }
+
+function handleFile(file){
+  if(!file) return;
+  if(typeof Papa==="undefined"){ showErr("The CSV reader didn’t load. Check your connection and reload the page."); return; }
+  $("err").style.display="none";
+  Papa.parse(file,{header:true,skipEmptyLines:true,complete:(res)=>{
+    const cols=res.meta.fields||[];
+    const missing=REQUIRED.filter(c=>!cols.includes(c));
+    if(missing.length){ showErr(`This file is missing ${missing.length>1?"columns":"a column"}: ${missing.join(", ")}. Export the 3-day QA report with these columns and try again.`); return; }
+    const insts=res.data.map((r,i)=>buildInst(r,i)).filter(x=>x.name);
+    if(!insts.length){ showErr("No instructor rows were found in this file."); return; }
+    state.insts=insts; state.drafts={}; state.sel=null; state.tab="flagged";
+    // default dates: Monday after the last day, review that Friday
+    const last=insts.flatMap(x=>x.days.map(d=>d.date)).filter(Boolean).sort().pop();
+    const base=last?new Date(+last.slice(0,4),+last.slice(5,7)-1,+last.slice(8,10)):new Date();
+    const mon=new Date(base); do{ mon.setDate(mon.getDate()+1); }while(mon.getDay()!==1);
+    const fri=new Date(mon); fri.setDate(mon.getDate()+4);
+    $("sCall").value=iso(mon); $("sReview").value=iso(fri);
+    $("fileName").textContent=file.name;
+    $("filebar").classList.remove("hidden"); $("drop").classList.add("hidden"); $("app").classList.remove("hidden");
+    const S=settings(); const first=insts.find(x=>evaluate(x,S).flagged);
+    state.sel=first?first.id:null;
+    render();
+  },error:()=>showErr("This file couldn’t be read as a CSV.")});
+}
+
+function groups(S){
+  const ev=state.insts.map(x=>({x,e:evaluate(x,S)}));
+  return {
+    flagged:ev.filter(o=>o.e.flagged),
+    watch:ev.filter(o=>o.e.watch),
+    esc:ev.filter(o=>o.x.escalations.length),
+    all:ev
+  };
+}
+
+function getDraft(inst,S){
+  const d=state.drafts[inst.id];
+  if(d && d.edited) return d;
+  const g=buildEmail(inst,S); state.drafts[inst.id]={...g,edited:false}; return state.drafts[inst.id];
+}
+
+function render(){
+  const S=settings(), G=groups(S), T=S.threshold;
+  const escCount=G.esc.reduce((a,o)=>a+o.x.escalations.length,0);
+  const ruleText={all3:`at or below ${fT(T)} on all three days`,available:`at or below ${fT(T)} on every day with sessions`,avg3:`at or below ${fT(T)} on the 3-day average`}[S.rule];
+  $("summary").innerHTML=`${state.insts.length} instructors in this export. <b>${G.flagged.length}</b> ${G.flagged.length===1?"is":"are"} ${ruleText}, ${G.watch.length} ${G.watch.length===1?"is":"are"} close to the line, and ${escCount} session${escCount===1?"":"s"} need${escCount===1?"s":""} an escalation check.`;
+  const tabs=[["flagged","Flagged",G.flagged.length],["watch","Close to the line",G.watch.length],["esc","Escalation checks",G.esc.length],["all","All",G.all.length]];
+  $("tabs").innerHTML=tabs.map(([k,l,c])=>`<button class="tab" data-tab="${k}" aria-pressed="${state.tab===k}">${l} (${c})</button>`).join("");
+  const q=state.q.toLowerCase();
+  let rows=G[state.tab].filter(o=>!q || [o.x.name,o.x.institute,o.x.email].join(" ").toLowerCase().includes(q));
+  if(state.tab==="all") rows=[...rows].sort((a,b)=>(b.e.flagged-a.e.flagged)||((a.e.mean3??99)-(b.e.mean3??99)));
+  $("list").innerHTML = rows.length ? rows.map(o=>{
+    const x=o.x;
+    const cells=x.days.map(d=>`<span class="cell ${scoreClass(d.avg,T)}" title="${esc(dShort(d.date))}">${d.avg==null?"–":d.avg.toFixed(1)}</span>`).join("");
+    return `<li><button class="item" data-id="${esc(x.id)}" aria-current="${state.sel===x.id}"><span><span class="nm">${esc(x.name)}</span><span class="mt">${esc(x.category)}${x.institute?", "+esc(x.institute):""}</span></span><span class="strip">${cells}</span></button></li>`;
+  }).join("") : `<li class="emptylist">${state.tab==="flagged"?"No instructors meet this rule. Try a different threshold or rule above.":"No instructors in this list."}</li>`;
+  $("copyAll").disabled=!G.flagged.length;
+  renderDetail(S);
+}
+
+function renderDetail(S){
+  const inst=state.insts.find(x=>x.id===state.sel);
+  if(!inst){ $("detail").innerHTML=`<div class="placeholder">Select an instructor to see their scores and email.</div>`; return; }
+  const T=S.threshold, e=evaluate(inst,S), d=getDraft(inst,S);
+  const badge = e.flagged?`<span class="badge lo">Flagged</span>`: e.watch?`<span class="badge md">Close to the line</span>`:"";
+  // marks
+  const tpos=Math.min(100,Math.max(0,T*10));
+  const cols=inst.days.map(dy=>{
+    const h=dy.avg==null?0:Math.max(2,dy.avg*10);
+    return `<div class="mcol"><span class="mval" style="color:var(--${dy.avg==null?"muted":dy.avg<=T?"low":dy.avg<T+1?"mid":"ok"})">${dy.avg==null?"–":dy.avg.toFixed(2)}</span><div class="mtrack"><div style="height:${h}%" class="mbar ${scoreClass(dy.avg,T)}"></div></div><span class="mday">${esc(dShort(dy.date))}</span></div>`;
+  }).join("");
+  const marks=`<div class="marks" role="img" aria-label="Daily averages: ${inst.days.map(dy=>`${dShort(dy.date)} ${dy.avg==null?"no sessions":dy.avg.toFixed(2)}`).join(", ")}; threshold ${fT(T)}">${cols}<div class="mplot"><div class="tline" style="bottom:${tpos}%"></div><span class="tlabel" style="bottom:${tpos}%">${fT(T)}</span></div></div>`;
+  // sessions
+  const sessRows=inst.sessions.map(s=>`<tr><td class="num">${esc(dShort(s.date))}${s.start?", "+esc(tShort(s.start)):""}</td><td>${esc(s.title)}</td><td>${esc(s.type)}</td><td class="num"><span class="score ${scoreClass(s.score,T)}">${s.score.toFixed(2)}</span></td></tr>`).join("");
+  // categories
+  let catRows="";
+  ["Lecture","Practice","Invigilation","Revision","Other"].forEach(t=>{
+    const c=inst.cat[t]; if(!c) return;
+    catRows+=`<tr class="typerow"><td colspan="4">${t}</td></tr>`;
+    Object.entries(c).sort((a,b)=>a[1].mean-b[1].mean).forEach(([k,s])=>{
+      catRows+=`<tr><td>${esc(kb(k).label)}</td><td class="num"><span class="score ${scoreClass(s.mean,T)}">${s.mean.toFixed(1)}</span></td><td class="num">${fr(s.min)}–${fr(s.max)}</td><td class="num">${s.n}</td></tr>`;
+    });
+  });
+  const notes=internalNotes(inst);
+  const mailto=`mailto:${encodeURIComponent(inst.email)}?subject=${encodeURIComponent(d.subject)}&body=${encodeURIComponent(d.body)}`;
+  $("detail").innerHTML=`<div class="detail">
+    <div class="dhead">
+      <div>
+        <h2>${esc(inst.name)}${badge}</h2>
+        <div class="meta">${esc(inst.category)}${inst.institute?", "+esc(inst.institute):""}</div>
+        <div class="meta">${esc(inst.email||"No email in export")}</div>
+        ${inst.managers?`<div class="meta">Managers: ${esc(inst.managers)}</div>`:""}
+      </div>
+      ${marks}
+    </div>
+    ${notes.length?`<h3>Check before sending</h3><div class="notes"><ul>${notes.map(n=>`<li>${esc(n)}</li>`).join("")}</ul></div>`:""}
+    <h3>Sessions</h3>
+    <div class="tbl">${inst.sessions.length?`<table><thead><tr><th>When</th><th>Session</th><th>Type</th><th>Score</th></tr></thead><tbody>${sessRows}</tbody></table>`:`<p style="padding:12px;margin:0;color:var(--muted)">No evaluated sessions in this export.</p>`}</div>
+    <h3>Rubric categories by session type</h3>
+    <div class="tbl">${catRows?`<table><thead><tr><th>Category</th><th>Average</th><th>Range</th><th>Sessions</th></tr></thead><tbody>${catRows}</tbody></table>`:`<p style="padding:12px;margin:0;color:var(--muted)">No rubric scores in this export.</p>`}</div>
+    <h3>Email</h3>
+    <div class="letterhead">
+      <label for="eTo">To</label><input id="eTo" value="${esc(inst.email)}" readonly>
+      <label for="eCc">CC</label><input id="eCc" value="${esc(inst.managers)}" readonly title="Manager names from the export; add their email addresses in your mail app">
+      <label for="eSub">Subject</label><input id="eSub" value="${esc(d.subject)}">
+    </div>
+    <textarea class="letter" id="eBody" spellcheck="true" aria-label="Email body">${esc(d.body)}</textarea>
+    <div class="actions">
+      <button class="btn" id="bCopy">Copy email</button>
+      <a class="btn ghost" id="bMail" href="${mailto}" target="_blank" rel="noopener">Open in mail app</a>
+      <button class="btn ghost" id="bReset" ${d.edited?"":"disabled"}>Reset to generated</button>
+      <span class="edited">${d.edited?"Edited. Changes to the settings won’t overwrite it.":"Updates automatically when you change the settings."}</span>
+    </div>
+  </div>`;
+  const markEdited=()=>{ const dr=state.drafts[inst.id]; dr.subject=$("eSub").value; dr.body=$("eBody").value; if(!dr.edited){ dr.edited=true; $("bReset").disabled=false; document.querySelector(".edited").textContent="Edited. Changes to the settings won’t overwrite it."; }
+    $("bMail").href=`mailto:${encodeURIComponent(inst.email)}?subject=${encodeURIComponent(dr.subject)}&body=${encodeURIComponent(dr.body)}`; };
+  $("eSub").addEventListener("input",markEdited); $("eBody").addEventListener("input",markEdited);
+  $("bCopy").onclick=()=>{ const dr=state.drafts[inst.id]; copyText(`To: ${inst.email}\nCC: ${inst.managers}\nSubject: ${dr.subject}\n\n${dr.body}`,"Email copied"); };
+  $("bReset").onclick=()=>{ delete state.drafts[inst.id]; renderDetail(settings()); toast("Reset to generated email"); };
+}
+
+function copyText(text,msg){
+  const done=()=>toast(msg);
+  const fallback=()=>{ const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); try{ document.execCommand("copy"); done(); }catch(e){ toast("Copy failed. Select the text and copy it manually."); } ta.remove(); };
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done).catch(fallback); } else fallback();
+}
+
+/* Events */
+["fileInput","fileInput2"].forEach(id=>$(id).addEventListener("change",ev=>{ handleFile(ev.target.files[0]); ev.target.value=""; }));
+const drop=$("drop");
+["dragenter","dragover"].forEach(t=>drop.addEventListener(t,e=>{ e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(t=>drop.addEventListener(t,e=>{ e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; if(f) handleFile(f); });
+$("tabs").addEventListener("click",e=>{ const b=e.target.closest(".tab"); if(!b) return; state.tab=b.dataset.tab; render(); });
+$("list").addEventListener("click",e=>{ const b=e.target.closest(".item"); if(!b) return; state.sel=b.dataset.id; render(); if(window.matchMedia("(max-width:900px)").matches) $("detail").scrollIntoView({behavior:"smooth",block:"start"}); });
+$("search").addEventListener("input",e=>{ state.q=e.target.value; render(); });
+$("settings").addEventListener("input",()=>{ Object.keys(state.drafts).forEach(k=>{ if(!state.drafts[k].edited) delete state.drafts[k]; }); render(); });
+$("copyAll").addEventListener("click",()=>{
+  const S=settings(); const G=groups(S);
+  const text=G.flagged.map(o=>{ const d=getDraft(o.x,S); return `To: ${o.x.email}\nCC: ${o.x.managers}\nSubject: ${d.subject}\n\n${d.body}`; }).join("\n\n---------------------------------------------\n\n");
+  copyText(text,`${G.flagged.length} email${G.flagged.length===1?"":"s"} copied`);
+});
+</script>
+</body>
+</html>

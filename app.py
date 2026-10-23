@@ -20,6 +20,8 @@ from rubrics import RubricBook
 BASE = Path(__file__).parent
 RUBRIC_DIR = Path(os.getenv("RUBRIC_DIR", BASE / "rubrics"))
 ACTIVE = RUBRIC_DIR / "active.xlsx"
+# CC'd on every email unless CC_EMAILS overrides it
+DEFAULT_CC = "riya.rai@nxtwave.co.in, meka.prudhvicharan@nxtwave.co.in"
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
@@ -96,7 +98,7 @@ def healthz():
 @app.get("/api/status")
 def status():
     _, name = rubric_book()
-    return jsonify({"llm": llm.provider_info(), "rubric": name, "cc": os.getenv("CC_EMAILS", "").strip()})
+    return jsonify({"llm": llm.provider_info(), "rubric": name, "cc": os.getenv("CC_EMAILS", "").strip() or DEFAULT_CC})
 
 
 @app.post("/api/analyze")

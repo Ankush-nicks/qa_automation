@@ -285,7 +285,7 @@ async function loadStatus(){
   try{
     const r=await fetch("/api/status"); const j=await r.json(); state.llm=j.llm;
     let saved=null; try{ saved=localStorage.getItem("qa.cc"); }catch(_){}
-    if(!$("sCc").value) $("sCc").value = saved ?? (j.cc||"");
+    if(!$("sCc").value) $("sCc").value = saved || j.cc || "";
     $("aiStatus").innerHTML = j.llm.configured
       ? `<span class="dot on"></span>AI ready (${esc(j.llm.provider==="openai"?"OpenAI":"Claude")}, ${esc(j.llm.model)})`
       : `<span class="dot off"></span>AI not set up. Add <code>OPENAI_API_KEY</code> in the server’s environment. Rule-based drafts still work.`;

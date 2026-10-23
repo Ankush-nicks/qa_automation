@@ -1,5 +1,5 @@
 """Writes the instructor email with an LLM, grounded in the computed facts and
-the rubric text. Claude (Anthropic) is the default; OpenAI is optional."""
+the rubric text. OpenAI (gpt-4o-mini) is the default; Claude is optional."""
 from __future__ import annotations
 
 import json
@@ -120,7 +120,9 @@ def _parse(text: str) -> dict:
 
 
 def provider_info() -> dict:
-    p = os.getenv("LLM_PROVIDER", "anthropic").lower()
+    p = (os.getenv("LLM_PROVIDER") or "").lower()
+    if not p:  # default to OpenAI unless only an Anthropic key is set
+        p = "anthropic" if os.getenv("ANTHROPIC_API_KEY") and not os.getenv("OPENAI_API_KEY") else "openai"
     if p == "openai":
         return {"provider": "openai", "model": os.getenv("OPENAI_MODEL") or "gpt-4o-mini",
                 "configured": bool(os.getenv("OPENAI_API_KEY"))}
@@ -131,7 +133,7 @@ def provider_info() -> dict:
 def _call(user: str) -> str:
     info = provider_info()
     if not info["configured"]:
-        raise RuntimeError("AI isn’t set up. Add ANTHROPIC_API_KEY (or OPENAI_API_KEY with LLM_PROVIDER=openai) "
+        raise RuntimeError("AI isn’t set up. Add OPENAI_API_KEY (or ANTHROPIC_API_KEY with LLM_PROVIDER=anthropic) "
                            "in the server’s environment variables.")
     if info["provider"] == "openai":
         from openai import OpenAI

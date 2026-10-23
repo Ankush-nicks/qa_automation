@@ -10,7 +10,7 @@ fails, a rule-based draft is always available.
 - `app.py` – Flask web app (routes, password, rubric upload)
 - `qa_engine.py` – reads the export, flags instructors, builds the facts and the rule-based draft
 - `rubrics.py` – reads the rubric workbook and pulls sub-rubric definitions and score bands
-- `llm.py` – writes the email with Claude (default) or OpenAI, and checks the numbers it used
+- `llm.py` – writes the email with OpenAI gpt-4o-mini (default) or Claude, and checks the numbers it used
 - `templates/index.html` – the page
 - `rubrics/Updated_Rubrics_and_Scoring.xlsx` – the rubric workbook the AI uses
 
@@ -23,16 +23,16 @@ fails, a rule-based draft is always available.
    - Build command: `pip install -r requirements.txt`
    - Start command: `gunicorn app:app --workers 2 --threads 4 --timeout 180 --bind 0.0.0.0:$PORT`
 4. Environment variables:
-   - `ANTHROPIC_API_KEY` – required for AI emails
-   - `ANTHROPIC_MODEL` – optional, defaults to `claude-haiku-5-5` (fast); set `claude-sonnet-5-5` for more polished writing
+   - `OPENAI_API_KEY` – required for AI emails
+   - `OPENAI_MODEL` – optional, defaults to `gpt-4o-mini` (fast)
    - `APP_PASSWORD` – optional but recommended; the browser will ask for it (any username)
-   - To use OpenAI instead: `LLM_PROVIDER=openai` and `OPENAI_API_KEY`; `OPENAI_MODEL` is optional and defaults to `gpt-4o-mini`
+   - To use Claude instead: `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`; `ANTHROPIC_MODEL` is optional and defaults to `claude-haiku-5-5`
 5. Deploy and open the URL.
 
 ## Run locally
 ```
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=sk-...
 python app.py          # http://localhost:5000
 ```
 

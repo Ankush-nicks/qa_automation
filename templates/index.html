@@ -159,6 +159,12 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
 .spin{width:16px;height:16px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);animation:sp 0.8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.loading{display:flex;flex-direction:column;align-items:center;gap:12px;padding:8px 0}
+.loading .spin{width:36px;height:36px;border-width:3px}
+.loading .lt{font-size:17px;font-weight:600;margin:0}
+.loading .ls{color:var(--muted);font-size:14px;margin:0;max-width:56ch}
+.drop.busy>:not(.loading){display:none}
+.btn .spin{width:14px;height:14px;border-color:rgba(255,255,255,.35);border-top-color:var(--accent-ink)}
 .listtools{flex-wrap:wrap}
 .listtools input{flex:1 1 100%}
 .listtools .btn{flex:1 1 auto;justify-content:center}
@@ -193,6 +199,11 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
     <input type="file" id="fileInput" accept=".csv,.xlsx,.xlsm,text/csv">
     <p class="fine">The file is processed on this server and isn’t stored. Only the selected instructor’s scores are sent to the AI when you write an email.</p>
     <div class="err" id="err" role="alert"></div>
+    <div class="loading hidden" id="loading" role="status" aria-live="polite">
+      <span class="spin" aria-hidden="true"></span>
+      <p class="lt" id="loadTitle">Reading the file…</p>
+      <p class="ls" id="loadSub"></p>
+    </div>
   </section>
 
   <section id="app" class="hidden">
@@ -206,6 +217,7 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
       <div class="field"><label for="sName">Sign off as</label><input id="sName" type="text" value="[Your Name]"></div>
       <div class="field check"><input id="sPlan" type="checkbox" checked><label for="sPlan">Mention improvement plan</label></div>
     </div>
+    <div class="busyline hidden" id="refreshing" role="status"><span class="spin" aria-hidden="true"></span>Updating with the new settings…</div>
     <p class="summary" id="summary"></p>
     <div class="main">
       <aside class="panel listpanel" aria-label="Instructors">
@@ -241,31 +253,52 @@ function settings(){
 const skey=()=>JSON.stringify(settings());
 function scoreClass(v,T){ if(v==null) return "na"; if(v<=T) return "lo"; if(v<T+1) return "md"; return "hi"; }
 function showErr(msg){ const e=$("err"); e.textContent=msg; e.style.display="block"; e.style.background=""; e.style.color=""; $("drop").classList.remove("hidden"); $("app").classList.add("hidden"); }
-function showStatus(msg){ const e=$("err"); e.textContent=msg; e.style.display="block"; e.style.background="var(--accent-tint)"; e.style.color="var(--ink)"; }
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2200); }
+
+let loadTimer=null;
+function setLoading(on,name){
+  clearInterval(loadTimer);
+  $("drop").classList.toggle("busy",on); $("loading").classList.toggle("hidden",!on);
+  [$("fileInput"),$("fileInput2")].forEach(i=>i.disabled=on);
+  if(!on) return;
+  const t0=Date.now();
+  $("loadTitle").textContent=`Reading ${name}…`;
+  const tick=()=>{
+    const s=Math.round((Date.now()-t0)/1000);
+    $("loadSub").textContent = s<4 ? "Uploading the file and checking scores for each instructor."
+      : s<12 ? `Finding flagged instructors and building drafts… ${s}s`
+      : `Still working… ${s}s. If the app was idle, the server may be waking up; this can take up to a minute.`;
+  };
+  tick(); loadTimer=setInterval(tick,1000);
+}
 
 async function loadStatus(){
   try{
     const r=await fetch("/api/status"); const j=await r.json(); state.llm=j.llm;
     $("aiStatus").innerHTML = j.llm.configured
       ? `<span class="dot on"></span>AI ready (${esc(j.llm.provider==="openai"?"OpenAI":"Claude")}, ${esc(j.llm.model)})`
-      : `<span class="dot off"></span>AI not set up. Add <code>ANTHROPIC_API_KEY</code> in the server’s environment. Rule-based drafts still work.`;
+      : `<span class="dot off"></span>AI not set up. Add <code>OPENAI_API_KEY</code> in the server’s environment. Rule-based drafts still work.`;
     $("rubricStatus").textContent = j.rubric ? `Rubrics: ${j.rubric}` : "No rubric workbook found on the server.";
   }catch(e){ $("aiStatus").textContent="Couldn’t reach the server."; }
 }
 
+let analyzeSeq=0;
 async function analyze(first){
   if(!state.file) return;
+  const seq=++analyzeSeq;
   const fd=new FormData(); fd.append("export",state.file);
   const S=settings(); if(first){ S.call=""; S.review=""; }
   fd.append("settings",JSON.stringify(S));
-  if(first){ $("drop").classList.remove("hidden"); $("app").classList.add("hidden"); showStatus(`Reading ${state.file.name}…`); }
+  if(first){ $("drop").classList.remove("hidden"); $("app").classList.add("hidden"); $("err").style.display="none"; setLoading(true,state.file.name); }
+  else $("refreshing").classList.remove("hidden");
   let j;
   try{
     const r=await fetch("/api/analyze",{method:"POST",body:fd});
     j=await r.json().catch(()=>({error:`The server returned an error (${r.status}).`}));
-    if(!r.ok||j.error){ showErr(j.error||`The server returned an error (${r.status}).`); return; }
-  }catch(e){ showErr("Couldn’t reach the server. Check your connection and try again."); return; }
+    if(seq!==analyzeSeq) return;
+    if(!r.ok||j.error){ setLoading(false); $("refreshing").classList.add("hidden"); showErr(j.error||`The server returned an error (${r.status}).`); return; }
+  }catch(e){ if(seq!==analyzeSeq) return; setLoading(false); $("refreshing").classList.add("hidden"); showErr("Couldn’t reach the server. Check your connection and try again."); return; }
+  setLoading(false); $("refreshing").classList.add("hidden");
   state.data=j;
   if(first){
     $("sCall").value=j.settings.call; $("sReview").value=j.settings.review;
@@ -304,9 +337,14 @@ async function writeAI(id){
 async function writeAll(){
   const ids=groups().flagged.map(x=>x.id).filter(id=>!(state.drafts[id]&&state.drafts[id].source==="ai"&&state.drafts[id].skey===skey()));
   if(!ids.length){ toast("Every flagged email already has an AI draft"); return; }
-  let i=0; const worker=async()=>{ while(i<ids.length){ const id=ids[i++]; await writeAI(id); } };
+  const b=$("aiAll"), label=b.textContent; let i=0, done=0;
+  const show=()=>{ b.innerHTML=`<span class="spin" aria-hidden="true"></span> Writing ${done} of ${ids.length} done…`; };
+  state.writingAll=true; b.disabled=true; show();
+  const worker=async()=>{ while(i<ids.length){ const id=ids[i++]; await writeAI(id); done++; show(); } };
   await Promise.all(Array.from({length:6},worker));
-  toast("AI drafts finished");
+  state.writingAll=false; b.textContent=label; render();
+  const failed=ids.filter(id=>state.failed[id]).length;
+  toast(failed?`AI drafts finished, ${failed} failed`:"AI drafts finished");
 }
 
 function render(){
@@ -327,7 +365,7 @@ function render(){
     return `<li><button class="item" data-id="${esc(x.id)}" aria-current="${state.sel===x.id}"><span><span class="nm">${esc(x.name)}</span><span class="mt">${esc(x.category)}${x.institute?", "+esc(x.institute):""}</span>${chip}</span><span class="strip">${cells}</span></button></li>`;
   }).join(""):`<li class="emptylist">${state.tab==="flagged"?"No instructors meet this rule. Try a different threshold or rule above.":"No instructors in this list."}</li>`;
   $("copyAll").disabled=!G.flagged.length;
-  $("aiAll").disabled=!G.flagged.length||!(state.llm&&state.llm.configured);
+  $("aiAll").disabled=!!state.writingAll||!G.flagged.length||!(state.llm&&state.llm.configured);
   renderDetail(S);
 }
 
@@ -366,7 +404,7 @@ function renderDetail(S){
     <h3>Email</h3>
     ${warns.map(w=>`<div class="warn">${esc(w)}</div>`).join("")}
     <p class="source">${src}</p>
-    ${busy?`<div class="busyline"><span class="spin" aria-hidden="true"></span>Writing with AI from the scores and rubric. This takes 20–60 seconds.</div>`:""}
+    ${busy?`<div class="busyline"><span class="spin" aria-hidden="true"></span>Writing with AI from the scores and rubric. This usually takes 10–20 seconds.</div>`:""}
     <div class="letterhead">
       <label for="eTo">To</label><input id="eTo" value="${esc(x.email)}" readonly>
       <label for="eCc">CC</label><input id="eCc" value="${esc(x.managers)}" readonly title="Manager names from the export; add their email addresses in your mail app">

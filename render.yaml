@@ -7,9 +7,11 @@ services:
     startCommand: gunicorn app:app --workers 2 --threads 4 --timeout 180 --bind 0.0.0.0:$PORT
     healthCheckPath: /healthz
     envVars:
-      - key: ANTHROPIC_API_KEY
+      - key: LLM_PROVIDER
+        value: openai
+      - key: OPENAI_API_KEY
         sync: false
-      - key: ANTHROPIC_MODEL
-        value: claude-haiku-5-5
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
       - key: APP_PASSWORD
         sync: false

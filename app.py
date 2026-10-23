@@ -8,7 +8,9 @@ import base64
 import hmac
 import json
 import os
+import re
 import threading
+from html import escape
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -116,7 +118,8 @@ def healthz():
 def status():
     _, name = rubric_book()
     return jsonify({"llm": llm.provider_info(), "rubric": name, "cc": os.getenv("CC_EMAILS", "").strip() or DEFAULT_CC,
-                    "managers": {"file": MANAGERS_FILE.name, "count": len(manager_map())}})
+                    "managers": {"file": MANAGERS_FILE.name, "count": len(manager_map())},
+                    "send": {k: v for k, v in send_config().items() if k != "url"}})
 
 
 @app.post("/api/analyze")
@@ -176,37 +179,69 @@ def api_generate():
                              "The rule-based draft is still available."), 502
 
 
+# ------------------------------------------------------------------ sending --
+# Send goes to a Power Automate flow ("When an HTTP request is received" ->
+# "Send an email (V2)"), see POWER_AUTOMATE.md. SEND_MODE is "test" unless set
+# to "live": in test mode every email goes to SEND_TEST_TO instead of the
+# instructor, with no CC, "[TEST]" in the subject and a note of who it would
+# have gone to.
+def send_config() -> dict:
+    url = os.getenv("SEND_API_URL", "").strip()
+    mode = "live" if os.getenv("SEND_MODE", "").strip().lower() == "live" else "test"
+    test_to = ", ".join(e for e in re.split(r"[,;\s]+", os.getenv("SEND_TEST_TO", "")) if e)
+    return {"configured": bool(url) and (mode == "live" or bool(test_to)), "url": url, "mode": mode, "test_to": test_to}
+
+
+def _emails(v) -> list[str]:
+    items = v if isinstance(v, list) else re.split(r"[,;]", str(v or ""))
+    return list(dict.fromkeys(str(e).strip() for e in items if str(e).strip()))
+
+
+def build_message(p: dict, cfg: dict) -> dict:
+    """The JSON the flow receives. Addresses are ';'-separated strings, which is what
+    Outlook's 'Send an email (V2)' expects in To and CC."""
+    to, cc = _emails(p.get("to")), _emails(p.get("cc"))
+    subject = str(p.get("subject") or "").strip()
+    html, text = str(p.get("html") or ""), str(p.get("text") or "")
+    test = cfg["mode"] != "live"
+    if test:
+        note = f"TEST EMAIL. In live mode this would go to: {'; '.join(to)}" + (f" | CC: {'; '.join(cc)}" if cc else "")
+        html = (f'<p style="font-family:Arial,sans-serif;font-size:13px;background:#FFF4CE;border:1px solid #E8C547;'
+                f'padding:8px 10px;margin:0 0 14px">{escape(note)}</p>' + html)
+        text = note + "\n\n" + text
+        to, cc, subject = _emails(cfg["test_to"]), [], f"[TEST] {subject}"
+    return {"to": "; ".join(to), "cc": "; ".join(cc), "subject": subject, "html": html, "text": text,
+            "instructor_id": str(p.get("instructor_id") or ""), "instructor_name": str(p.get("instructor_name") or ""),
+            "test": test}
+
+
 @app.post("/api/send")
 def api_send():
-    """Sends one email by passing it on to the email API at SEND_API_URL (POST, JSON body:
-    to, cc, subject, html, text, instructor_id, instructor_name; SEND_API_TOKEN, if set, goes in
-    an 'Authorization: Bearer' header). Until SEND_API_URL is set, nothing is sent."""
     p = request.get_json(silent=True) or {}
-    to = str(p.get("to") or "").strip()
-    subject = str(p.get("subject") or "").strip()
-    if not to or not subject or not (p.get("html") or p.get("text")):
+    if not _emails(p.get("to")) or not str(p.get("subject") or "").strip() or not (p.get("html") or p.get("text")):
         return jsonify(error="The email needs a recipient, a subject and a body."), 400
-    url = os.getenv("SEND_API_URL", "").strip()
-    if not url:
+    cfg = send_config()
+    if not cfg["url"]:
         return jsonify(error="Sending isn’t set up yet. Use Copy email for now."), 501
-    msg = {"to": to, "cc": [str(c).strip() for c in (p.get("cc") or []) if str(c).strip()], "subject": subject,
-           "html": p.get("html") or "", "text": p.get("text") or "",
-           "instructor_id": p.get("instructor_id"), "instructor_name": p.get("instructor_name")}
+    if not cfg["configured"]:
+        return jsonify(error="Test mode needs SEND_TEST_TO (the address that receives test emails) on the server."), 501
+    msg = build_message(p, cfg)
     headers = {"Content-Type": "application/json"}
     token = os.getenv("SEND_API_TOKEN", "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
     try:
-        req = urllib.request.Request(url, data=json.dumps(msg).encode(), headers=headers, method="POST")
-        with urllib.request.urlopen(req, timeout=30) as r:
+        req = urllib.request.Request(cfg["url"], data=json.dumps(msg).encode(), headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=60) as r:
             r.read()
     except urllib.error.HTTPError as e:
-        app.logger.error("send failed: %s %s", e.code, e.read()[:500])
-        return jsonify(error=f"The email API refused the email ({e.code})."), 502
+        detail = e.read()[:300].decode(errors="replace")
+        app.logger.error("send failed: %s %s", e.code, detail)
+        return jsonify(error=f"Power Automate refused the email ({e.code}). {detail}".strip()), 502
     except Exception as e:  # noqa: BLE001
         app.logger.exception("send failed")
-        return jsonify(error=f"Couldn’t reach the email API ({e})."), 502
-    return jsonify(ok=True)
+        return jsonify(error=f"Couldn’t reach Power Automate ({e})."), 502
+    return jsonify(ok=True, test=msg["test"], to=msg["to"])
 
 
 @app.post("/api/roster")

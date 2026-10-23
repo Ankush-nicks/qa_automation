@@ -25,6 +25,7 @@ fails, a rule-based draft is always available.
 4. Environment variables:
    - `OPENAI_API_KEY` – required for AI emails
    - `OPENAI_MODEL` – optional, defaults to `gpt-4o-mini` (fast)
+   - `CC_EMAILS` – optional, comma-separated addresses to CC on every email (can also be typed in the page's "Always CC" field)
    - `APP_PASSWORD` – optional but recommended; the browser will ask for it (any username)
    - To use Claude instead: `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`; `ANTHROPIC_MODEL` is optional and defaults to `claude-haiku-5-5`
 5. Deploy and open the URL.

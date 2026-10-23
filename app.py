@@ -96,7 +96,7 @@ def healthz():
 @app.get("/api/status")
 def status():
     _, name = rubric_book()
-    return jsonify({"llm": llm.provider_info(), "rubric": name})
+    return jsonify({"llm": llm.provider_info(), "rubric": name, "cc": os.getenv("CC_EMAILS", "").strip()})
 
 
 @app.post("/api/analyze")

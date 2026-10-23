@@ -63,6 +63,8 @@ input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events
 .settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px 16px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
 .field label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:4px}
 .field input,.field select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--paper)}
+.field.wide{grid-column:span 2}
+@media (max-width:420px){.field.wide{grid-column:auto}}
 .field.check{display:flex;align-items:center;gap:8px;padding-top:22px}
 .field.check label{margin:0;color:var(--ink);font-weight:500}
 .field.check input{width:auto;margin:0}
@@ -217,6 +219,7 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
         <select id="sRule"><option value="all3">All 3 days</option><option value="available">Every day with sessions</option><option value="avg3">3-day average</option></select></div>
       <div class="field"><label for="sGoal">Target by review date</label><input id="sGoal" type="number" step="0.1" min="0" max="10" value="6"></div>
       <div class="field"><label for="sReview">Review date</label><input id="sReview" type="date"></div>
+      <div class="field wide"><label for="sCc">Always CC (emails, comma-separated)</label><input id="sCc" type="text" placeholder="riya@…, prudhvi@…"></div>
       <div class="field"><label for="sName">Sign off as</label><input id="sName" type="text" value="[Your Name]"></div>
       <div class="field check"><input id="sPlan" type="checkbox" checked><label for="sPlan">Mention improvement plan</label></div>
     </div>
@@ -250,6 +253,7 @@ const fT=v=>String(Number(Number(v).toFixed(2)));
 
 const state={file:null,data:null,drafts:{},tab:"flagged",q:"",sel:null,busy:{},failed:{},llm:null};
 
+const ccList=()=>$("sCc").value.split(/[,;\s]+/).map(s=>s.trim()).filter(Boolean).join(", ");
 function settings(){
   return {threshold:parseFloat($("sThr").value)||5, rule:$("sRule").value, goal:parseFloat($("sGoal").value)||6,
           review:$("sReview").value, name:$("sName").value.trim(), plan:$("sPlan").checked};
@@ -280,6 +284,8 @@ function setLoading(on,name){
 async function loadStatus(){
   try{
     const r=await fetch("/api/status"); const j=await r.json(); state.llm=j.llm;
+    let saved=null; try{ saved=localStorage.getItem("qa.cc"); }catch(_){}
+    if(!$("sCc").value) $("sCc").value = saved ?? (j.cc||"");
     $("aiStatus").innerHTML = j.llm.configured
       ? `<span class="dot on"></span>AI ready (${esc(j.llm.provider==="openai"?"OpenAI":"Claude")}, ${esc(j.llm.model)})`
       : `<span class="dot off"></span>AI not set up. Add <code>OPENAI_API_KEY</code> in the server’s environment. Rule-based drafts still work.`;
@@ -393,7 +399,7 @@ function renderDetail(S){
   const canAI=state.llm&&state.llm.configured;
   const src=ai?`AI draft (${esc(d.model||"")})${d.edited?", edited":""}${stale?". Settings have changed since this was written; rewrite to update it.":""}`:`Rule-based draft${d&&d.edited?", edited":""}`;
   const warns=[...(d&&d.warnings||[])].concat(state.failed[x.id]?[state.failed[x.id]]:[]);
-  const mailto=d?`mailto:${encodeURIComponent(x.email)}?subject=${encodeURIComponent(d.subject)}&body=${encodeURIComponent(d.body)}`:"#";
+  const mailto=d?`mailto:${encodeURIComponent(x.email)}?cc=${encodeURIComponent(ccList())}&subject=${encodeURIComponent(d.subject)}&body=${encodeURIComponent(d.body)}`:"#";
   $("detail").innerHTML=`<div class="detail">
     <div class="dhead"><div>
       <h2>${esc(x.name)}${badge}</h2>
@@ -412,7 +418,7 @@ function renderDetail(S){
     ${busy?`<div class="busyline"><span class="spin" aria-hidden="true"></span>Writing with AI from the scores and rubric. This usually takes about 10 seconds.</div>`:""}
     <div class="letterhead">
       <label for="eTo">To</label><input id="eTo" value="${esc(x.email)}" readonly>
-      <label for="eCc">CC</label><input id="eCc" value="${esc(x.managers)}" readonly title="Manager names from the export; add their email addresses in your mail app">
+      <label for="eCc">CC</label><input id="eCc" value="${esc(ccList())}" readonly title="Set in Always CC above${x.managers?`. Managers in the export: ${esc(x.managers)}`:""}">
       <label for="eSub">Subject</label><input id="eSub" value="${esc(d?d.subject:"")}">
     </div>
     <textarea class="letter" id="eBody" spellcheck="true" aria-label="Email body">${esc(d?d.body:"")}</textarea>
@@ -424,10 +430,10 @@ function renderDetail(S){
     </div>
   </div>`;
   const mark=()=>{ const dr=state.drafts[x.id]; dr.subject=$("eSub").value; dr.body=$("eBody").value; dr.edited=true;
-    $("bMail").href=`mailto:${encodeURIComponent(x.email)}?subject=${encodeURIComponent(dr.subject)}&body=${encodeURIComponent(dr.body)}`; };
+    $("bMail").href=`mailto:${encodeURIComponent(x.email)}?cc=${encodeURIComponent(ccList())}&subject=${encodeURIComponent(dr.subject)}&body=${encodeURIComponent(dr.body)}`; };
   $("eSub").addEventListener("input",mark); $("eBody").addEventListener("input",mark);
   $("bAI").onclick=()=>writeAI(x.id);
-  $("bCopy").onclick=()=>{ const dr=state.drafts[x.id]; copyText(`To: ${x.email}\nCC: ${x.managers}\nSubject: ${dr.subject}\n\n${dr.body}`,"Email copied"); };
+  $("bCopy").onclick=()=>{ const dr=state.drafts[x.id]; copyText(`To: ${x.email}\nCC: ${ccList()}\nSubject: ${dr.subject}\n\n${dr.body}`,"Email copied"); };
   $("bRule").onclick=()=>{ state.drafts[x.id]={source:"rule",subject:x.baseline.subject,body:x.baseline.body,edited:false,warnings:[],skey:skey()}; render(); };
 }
 
@@ -448,10 +454,12 @@ drop.addEventListener("dragleave",()=>drop.classList.remove("over"));
 $("tabs").addEventListener("click",e=>{ const b=e.target.closest(".tab"); if(!b) return; state.tab=b.dataset.tab; render(); });
 $("list").addEventListener("click",e=>{ const b=e.target.closest(".item"); if(!b) return; state.sel=b.dataset.id; render(); if(window.matchMedia("(max-width:900px)").matches) $("detail").scrollIntoView({behavior:"smooth",block:"start"}); });
 $("search").addEventListener("input",e=>{ state.q=e.target.value; render(); });
-let tmr; $("settings").addEventListener("input",()=>{ clearTimeout(tmr); tmr=setTimeout(()=>analyze(false),450); });
+let tmr; $("settings").addEventListener("input",e=>{
+  if(e.target.id==="sCc"){ try{ localStorage.setItem("qa.cc",$("sCc").value); }catch(_){} if(state.data) render(); return; }
+  clearTimeout(tmr); tmr=setTimeout(()=>analyze(false),450); });
 $("aiAll").addEventListener("click",writeAll);
 $("copyAll").addEventListener("click",()=>{
-  const text=groups().flagged.map(x=>{ const d=state.drafts[x.id]; return `To: ${x.email}\nCC: ${x.managers}\nSubject: ${d.subject}\n\n${d.body}`; }).join("\n\n---------------------------------------------\n\n");
+  const text=groups().flagged.map(x=>{ const d=state.drafts[x.id]; return `To: ${x.email}\nCC: ${ccList()}\nSubject: ${d.subject}\n\n${d.body}`; }).join("\n\n---------------------------------------------\n\n");
   copyText(text,`${groups().flagged.length} emails copied`);
 });
 $("rubricInput").addEventListener("change",async ev=>{

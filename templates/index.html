@@ -216,7 +216,6 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
       <div class="field"><label for="sRule">At or below threshold on</label>
         <select id="sRule"><option value="all3">All 3 days</option><option value="available">Every day with sessions</option><option value="avg3">3-day average</option></select></div>
       <div class="field"><label for="sGoal">Target by review date</label><input id="sGoal" type="number" step="0.1" min="0" max="10" value="6"></div>
-      <div class="field"><label for="sCall">Coaching call</label><input id="sCall" type="date"></div>
       <div class="field"><label for="sReview">Review date</label><input id="sReview" type="date"></div>
       <div class="field"><label for="sName">Sign off as</label><input id="sName" type="text" value="[Your Name]"></div>
       <div class="field check"><input id="sPlan" type="checkbox" checked><label for="sPlan">Mention improvement plan</label></div>
@@ -253,7 +252,7 @@ const state={file:null,data:null,drafts:{},tab:"flagged",q:"",sel:null,busy:{},f
 
 function settings(){
   return {threshold:parseFloat($("sThr").value)||5, rule:$("sRule").value, goal:parseFloat($("sGoal").value)||6,
-          call:$("sCall").value, review:$("sReview").value, name:$("sName").value.trim(), plan:$("sPlan").checked};
+          review:$("sReview").value, name:$("sName").value.trim(), plan:$("sPlan").checked};
 }
 const skey=()=>JSON.stringify(settings());
 function scoreClass(v,T){ if(v==null) return "na"; if(v<=T) return "lo"; if(v<T+1) return "md"; return "hi"; }
@@ -293,7 +292,7 @@ async function analyze(first){
   if(!state.file) return;
   const seq=++analyzeSeq;
   const fd=new FormData(); fd.append("export",state.file);
-  const S=settings(); if(first){ S.call=""; S.review=""; }
+  const S=settings(); if(first){ S.review=""; }
   fd.append("settings",JSON.stringify(S));
   if(first){ $("drop").classList.remove("hidden"); $("app").classList.add("hidden"); $("err").style.display="none"; setLoading(true,state.file.name); }
   else { $("refreshing").classList.remove("hidden"); $("topbar").classList.remove("hidden"); }
@@ -307,7 +306,7 @@ async function analyze(first){
   setLoading(false); $("refreshing").classList.add("hidden"); $("topbar").classList.add("hidden");
   state.data=j;
   if(first){
-    $("sCall").value=j.settings.call; $("sReview").value=j.settings.review;
+    $("sReview").value=j.settings.review;
     state.drafts={}; state.busy={}; state.failed={}; state.tab="flagged";
     const f=j.instructors.find(x=>x.flagged); state.sel=f?f.id:null;
   }

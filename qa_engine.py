@@ -649,7 +649,8 @@ def analyze(df: pd.DataFrame, S: dict) -> dict:
     if not insts:
         raise ValueError("No instructor rows could be read from this file.")
     if not S.get("call") or not S.get("review"):
-        S["call"], S["review"] = default_dates(insts)
+        call, review = default_dates(insts)
+        S["call"], S["review"] = S.get("call") or call, S.get("review") or review
     out = []
     for x in insts:
         e = evaluate(x, S)

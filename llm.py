@@ -118,15 +118,21 @@ def _parse(text: str) -> dict:
     return {"subject": str(obj.get("subject") or "").strip(), "body": body.strip()}
 
 
+def _env(name: str) -> str:
+    # Keys pasted into a dashboard often carry a stray space or newline, which
+    # makes the HTTP header invalid and surfaces as a vague "Connection error".
+    return (os.getenv(name) or "").strip().strip('"').strip("'").strip()
+
+
 def provider_info() -> dict:
-    p = (os.getenv("LLM_PROVIDER") or "").lower()
+    p = _env("LLM_PROVIDER").lower()
     if not p:  # default to OpenAI unless only an Anthropic key is set
-        p = "anthropic" if os.getenv("ANTHROPIC_API_KEY") and not os.getenv("OPENAI_API_KEY") else "openai"
+        p = "anthropic" if _env("ANTHROPIC_API_KEY") and not _env("OPENAI_API_KEY") else "openai"
     if p == "openai":
-        return {"provider": "openai", "model": os.getenv("OPENAI_MODEL") or "gpt-4o-mini",
-                "configured": bool(os.getenv("OPENAI_API_KEY"))}
-    return {"provider": "anthropic", "model": os.getenv("ANTHROPIC_MODEL") or "claude-haiku-5-5",
-            "configured": bool(os.getenv("ANTHROPIC_API_KEY"))}
+        return {"provider": "openai", "model": _env("OPENAI_MODEL") or "gpt-4o-mini",
+                "configured": bool(_env("OPENAI_API_KEY"))}
+    return {"provider": "anthropic", "model": _env("ANTHROPIC_MODEL") or "claude-haiku-5-5",
+            "configured": bool(_env("ANTHROPIC_API_KEY"))}
 
 
 def _call(user: str) -> str:
@@ -136,13 +142,13 @@ def _call(user: str) -> str:
                            "in the server’s environment variables.")
     if info["provider"] == "openai":
         from openai import OpenAI
-        client = OpenAI(timeout=120)
+        client = OpenAI(api_key=_env("OPENAI_API_KEY"), timeout=120)
         r = client.chat.completions.create(model=info["model"], max_tokens=1500,
                                            response_format={"type": "json_object"}, messages=[
             {"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user}])
         return r.choices[0].message.content or ""
     from anthropic import Anthropic
-    client = Anthropic(timeout=120)
+    client = Anthropic(api_key=_env("ANTHROPIC_API_KEY"), timeout=120)
     msg = client.messages.create(model=info["model"], max_tokens=1500, system=SYSTEM_PROMPT,
                                  messages=[{"role": "user", "content": user}])
     return "".join(getattr(b, "text", "") for b in msg.content)

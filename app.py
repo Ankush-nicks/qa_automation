@@ -131,7 +131,9 @@ def api_generate():
         return jsonify(error=str(e)), 400
     except Exception as e:  # noqa: BLE001
         app.logger.exception("generate failed")
-        return jsonify(error=f"The AI couldn’t write this email ({type(e).__name__}: {e}). The rule-based draft is still available."), 502
+        cause = f" Cause: {e.__cause__}" if e.__cause__ else ""
+        return jsonify(error=f"The AI couldn’t write this email ({type(e).__name__}: {e}).{cause} "
+                             "The rule-based draft is still available."), 502
 
 
 @app.post("/api/rubrics")

@@ -260,6 +260,7 @@ const ccList=()=>$("sCc").value.split(/[,;\s]+/).map(s=>s.trim()).filter(Boolean
 // Capability managers from the roster export, kept in this browser until replaced
 const normId=s=>String(s||"").replace(/-/g,"").toLowerCase();
 let roster=null;
+const emptyRoster=r=>`${r.file} has no capability_manager_email values, so it wasn’t loaded. Use the roster export with manager emails filled in.`;
 function setRoster(r,save){
   roster={file:r.file,count:r.count,byId:new Map(),byEmail:new Map()};
   r.entries.forEach(e=>{ if(e.id) roster.byId.set(e.id,e); if(e.email) roster.byEmail.set(e.email,e); });
@@ -328,11 +329,12 @@ async function analyze(first){
   }catch(e){ if(seq!==analyzeSeq) return; setLoading(false); $("refreshing").classList.add("hidden"); $("topbar").classList.add("hidden"); showErr("Couldn’t reach the server. Check your connection and try again."); return; }
   setLoading(false); $("refreshing").classList.add("hidden"); $("topbar").classList.add("hidden");
   if(j.roster){
-    setRoster(j.roster,true); state.file=state.prevFile||null;
+    const ok=j.roster.count>0; if(ok) setRoster(j.roster,true);
+    state.file=state.prevFile||null;
     setLoading(false); $("refreshing").classList.add("hidden"); $("topbar").classList.add("hidden");
-    toast("Roster loaded");
-    if(state.data){ $("drop").classList.add("hidden"); $("app").classList.remove("hidden"); render(); }
-    else showInfo(`Roster loaded: ${j.roster.count} instructors with a capability manager. Now upload the 3-day QA export.`);
+    if(state.data){ $("drop").classList.add("hidden"); $("app").classList.remove("hidden"); render(); toast(ok?"Roster loaded":"Roster not loaded: no manager emails"); }
+    else if(ok) showInfo(`Roster loaded: ${j.roster.count} instructors with a capability manager. Now upload the 3-day QA export.`);
+    else showErr(emptyRoster(j.roster));
     return;
   }
   state.data=j; state.prevFile=state.file;
@@ -502,6 +504,7 @@ $("rosterInput").addEventListener("change",async ev=>{
   const fd=new FormData(); fd.append("roster",f);
   try{ const r=await fetch("/api/roster",{method:"POST",body:fd}); const j=await r.json().catch(()=>({error:`The server returned an error (${r.status}).`}));
     if(!r.ok||j.error){ toast(j.error||"Upload failed"); return; }
+    if(!j.roster.count){ toast("Roster not loaded: no manager emails"); alert(emptyRoster(j.roster)); return; }
     setRoster(j.roster,true); toast("Roster loaded"); if(state.data) render();
   }catch(e){ toast("Couldn’t reach the server."); }
 });

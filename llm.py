@@ -40,9 +40,9 @@ KEY INSIGHTS – group by session type ("Lecture-format sessions", "Practice ses
 ACTION ITEMS – 4–5 numbered, concrete actions tied to the rubric's next/target band (use the rubric's own measurable
   markers where it gives them, e.g. questions per 15 minutes, talk-time %, coverage %). Last item: observe a
   high-scoring trainer's session this week.
-SUPPORT FROM OUR SIDE – coaching call date and the recordings to review; daily QA check-ins.
 EXPECTED OUTCOME AND NEXT STEPS – daily-average target, the category targets, review date (and improvement plan only if allowed).
-<closing line asking for a slot for the call and whether anything about the setup is getting in the way>
+<closing line asking whether anything about the setup is getting in the way>
+Do NOT add a support section, a coaching call or daily check-ins.
 Regards,
 <sender>
 
@@ -87,8 +87,6 @@ def build_prompt(inst: dict, S: dict, book) -> tuple[str, dict]:
         "trend": P["trend"],
         "conduct_concerns": P["conduct"],
         "suggested_actions_from_playbook": P["actions"],
-        "coaching_call_date": P["call"], "call_weekday": P["call_day"],
-        "recordings_to_review": P["recordings"],
         "review_date": P["review"],
         "threshold": P["threshold"], "target_daily_average_by_review": P["goal"],
         "categories_to_lift": P["targets"], "category_minimum_target": P["target_category_min"],

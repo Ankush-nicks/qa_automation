@@ -567,15 +567,7 @@ def baseline_email(inst: dict, S: dict) -> dict:
               f"{'those recordings' if len(items) > 1 else 'that recording'} together so we understand what happened.", ""]
     L.append("ACTION ITEMS")
     L += [f"{i}. {a}" for i, a in enumerate(P["actions"], 1)]
-    L += ["", "SUPPORT FROM OUR SIDE"]
-    r = P["recordings"]
-    if len(r) == 2:
-        L.append(f"- A 1:1 coaching call on {P['call']}, to walk through two recordings: {r[0]} and {r[1]}.")
-    elif len(r) == 1:
-        L.append(f"- A 1:1 coaching call on {P['call']}, to walk through your {r[0]} recording.")
-    else:
-        L.append(f"- A 1:1 coaching call on {P['call']}.")
-    L += ["- Daily QA score check-ins through next week.", "", "EXPECTED OUTCOME AND NEXT STEPS",
+    L += ["", "EXPECTED OUTCOME AND NEXT STEPS",
           f"- Target: a daily average above {P['threshold']} every day next week, reaching {P['goal']}+ by {P['review']}."]
     if len(P["targets"]) == 2:
         L.append(f"- {P['targets'][0]} and {P['targets'][1]} should each reach at least {P['target_category_min']}.")
@@ -583,8 +575,8 @@ def baseline_email(inst: dict, S: dict) -> dict:
         L.append(f"- {P['targets'][0]} should reach at least {P['target_category_min']}.")
     tail = f" If scores are still at or below {P['threshold']}, we’ll move to a structured improvement plan with your manager." if P["plan"] else ""
     L += [f"- We’ll review progress together on {P['review']}.{tail}", "",
-          f"Please reply with a slot that works for {P['call_day']}’s call. Also let me know if anything about the "
-          f"{P['setup']} is getting in the way, so we can fix that from our side too.", "",
+          f"Please let me know if anything about the {P['setup']} is getting in the way, so we can fix that from "
+          f"our side too.", "",
           "Regards,", P["sender"]]
     return {"subject": P["subject"], "body": "\n".join(L)}
 

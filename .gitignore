@@ -5,3 +5,4 @@ rubrics/active.xlsx
 rubrics/active.name
 rubrics/upload.tmp.xlsx
 *.zip
+*.csv

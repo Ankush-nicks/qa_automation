@@ -258,7 +258,7 @@ const tShort=dt=>{const m=String(dt||"").match(/T(\d{2}):(\d{2})/);if(!m)return"
 const fr=v=>v%1===0?v.toFixed(1):String(Number(v.toFixed(2)));
 const fT=v=>String(Number(Number(v).toFixed(2)));
 
-const state={file:null,data:null,drafts:{},tab:"flagged",subj:"all",q:"",sel:null,busy:{},failed:{},llm:null};
+const state={file:null,data:null,drafts:{},tab:"flagged",subj:"all",q:"",sel:null,busy:{},failed:{},sent:{},sending:{},llm:null};
 try{ state.subj=localStorage.getItem("qa.subj")||"all"; }catch(_){}
 // Subject filter: these four first, then any other category found in the export
 const SUBJECTS=[["TECH","Tech"],["ENGLISH","English"],["APTITUDE","Aptitude"],["MATH","Math"]];
@@ -426,7 +426,7 @@ function render(){
   $("list").innerHTML=rows.length?rows.map(x=>{
     const cells=x.days.map(d=>`<span class="cell ${scoreClass(d.avg,T)}" title="${esc(dShort(d.date))}">${d.avg==null?"–":d.avg.toFixed(1)}</span>`).join("");
     const d=state.drafts[x.id];
-    const chip=state.busy[x.id]?`<span class="chip busy">Writing…</span>`:state.failed[x.id]?`<span class="chip fail">AI failed</span>`:(d&&d.source==="ai")?`<span class="chip ai">AI draft</span>`:"";
+    const chip=state.sent[x.id]?`<span class="chip ai">Sent</span>`:state.busy[x.id]?`<span class="chip busy">Writing…</span>`:state.failed[x.id]?`<span class="chip fail">AI failed</span>`:(d&&d.source==="ai")?`<span class="chip ai">AI draft</span>`:"";
     return `<li><button class="item" data-id="${esc(x.id)}" aria-current="${state.sel===x.id}"><span><span class="nm">${esc(x.name)}</span><span class="mt">${esc(x.category)}${x.institute?", "+esc(x.institute):""}</span>${chip}</span><span class="strip">${cells}</span></button></li>`;
   }).join(""):`<li class="emptylist">${state.tab==="flagged"?"No instructors meet this rule. Try a different threshold above.":"No instructors in this list."}</li>`;
   $("copyAll").disabled=!G.flagged.length;
@@ -450,10 +450,9 @@ function renderDetail(S){
     Object.values(c).sort((a,b)=>a.mean-b.mean).forEach(s=>{ catRows+=`<tr><td>${esc(s.label)}</td><td class="num"><span class="score ${scoreClass(s.mean,T)}">${s.mean.toFixed(1)}</span></td><td class="num">${fr(s.min)}–${fr(s.max)}</td><td class="num">${s.n}</td></tr>`; });
   });
   const busy=!!state.busy[x.id], ai=d&&d.source==="ai", stale=d&&d.skey!==skey();
-  const canAI=state.llm&&state.llm.configured;
-  const src=ai?`AI draft (${esc(d.model||"")})${d.edited?", edited":""}${stale?". Settings have changed since this was written; rewrite to update it.":""}`:`Rule-based draft${d&&d.edited?", edited":""}`;
+  const src=ai?`AI draft (${esc(d.model||"")})${d.edited?", edited":""}${stale?". Settings have changed since this was written.":""}`:`Auto-generated draft${d&&d.edited?", edited":""}`;
   const warns=[...(d&&d.warnings||[])].concat(state.failed[x.id]?[state.failed[x.id]]:[]);
-  const mailto=d?mailtoFor(x,d):"#";
+  const sent=state.sent[x.id];
   $("detail").innerHTML=`<div class="detail">
     <div class="dhead"><div>
       <h2>${esc(x.name)}${badge}</h2>
@@ -463,39 +462,58 @@ function renderDetail(S){
         if(m) return `<div class="meta">Capability manager: ${esc(m.name)}</div>`+(m.external.length?`<div class="meta">Not CC’d (outside the company): ${esc(m.external.join(", "))}</div>`:"");
         return `<div class="meta">No capability manager found${state.mgrs&&state.mgrs.count?" from the list":""}${x.managers?` among: ${esc(x.managers)}`:" (no manager names in the export)"}</div>`; })()}
     </div>${marks}</div>
-    ${x.notes.length?`<h3>Check before sending</h3><div class="notes"><ul>${x.notes.map(n=>`<li>${esc(n)}</li>`).join("")}</ul></div>`:""}
-    <h3>Sessions</h3>
-    <div class="tbl">${x.sessions.length?`<table><thead><tr><th>When</th><th>Session</th><th>Type</th><th>Score</th></tr></thead><tbody>${sessRows}</tbody></table>`:`<p style="padding:12px;margin:0;color:var(--muted)">No evaluated sessions in this export.</p>`}</div>
-    <h3>Rubric categories by session type</h3>
-    <div class="tbl">${catRows?`<table><thead><tr><th>Category</th><th>Average</th><th>Range</th><th>Sessions</th></tr></thead><tbody>${catRows}</tbody></table>`:`<p style="padding:12px;margin:0;color:var(--muted)">No rubric scores in this export.</p>`}</div>
     <h3>Email</h3>
     ${warns.map(w=>`<div class="warn">${esc(w)}</div>`).join("")}
-    <p class="source">${src}</p>
+    <p class="source">${src}${sent?` · Sent ${esc(sent)}`:""}</p>
     ${busy?`<div class="busyline"><span class="spin" aria-hidden="true"></span>Writing with AI from the scores and rubric. This usually takes about 10 seconds.</div>`:""}
     <div class="letterhead">
       <label for="eTo">To</label><input id="eTo" value="${esc(x.email)}" readonly>
       <label for="eCc">CC</label><input id="eCc" value="${esc(ccFor(x))}" readonly title="Always CC plus the instructor’s capability manager">
       <label for="eSub">Subject</label><input id="eSub" value="${esc(d?d.subject:"")}">
     </div>
-    ${state.preview
-      ? `<div class="letter preview" id="ePreview" aria-label="Email preview">${mdToHtml(d?d.body:"")}</div>`
-      : `<textarea class="letter" id="eBody" spellcheck="true" aria-label="Email body">${esc(d?d.body:"")}</textarea>`}
+    <div class="letter preview" id="eBody" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true"
+         aria-label="Email body (click to edit)">${d?emailHtml(d):""}</div>
     <div class="actions">
-      <button class="btn" id="bAI" ${busy||!canAI?"disabled":""} title="${canAI?"":"AI isn’t set up on the server"}">${ai?"Rewrite with AI":"Write with AI"}</button>
-      <button class="btn ghost" id="bPreview" aria-pressed="${!!state.preview}">${state.preview?"Edit":"Preview"}</button>
-      <button class="btn ghost" id="bCopy" title="Copies the formatted email (headings and bold) to paste into Gmail or Outlook">Copy email</button>
-      <a class="btn ghost" id="bMail" href="${mailto}" target="_blank" rel="noopener">Open in mail app</a>
-      <button class="btn ghost" id="bRule" ${(!ai&&!(d&&d.edited))?"disabled":""}>Use rule-based draft</button>
+      <button class="btn ghost" id="bCopy" title="Copies the formatted email to paste into Gmail or Outlook">Copy email</button>
+      <button class="btn" id="bSend" ${state.sending[x.id]||!x.email?"disabled":""}>${state.sending[x.id]?`<span class="spin" aria-hidden="true"></span> Sending…`:sent?"Send again":"Send"}</button>
     </div>
+    <h3>Sessions</h3>
+    <div class="tbl">${x.sessions.length?`<table><thead><tr><th>When</th><th>Session</th><th>Type</th><th>Score</th></tr></thead><tbody>${sessRows}</tbody></table>`:`<p style="padding:12px;margin:0;color:var(--muted)">No evaluated sessions in this export.</p>`}</div>
+    <h3>Rubric categories by session type</h3>
+    <div class="tbl">${catRows?`<table><thead><tr><th>Category</th><th>Average</th><th>Range</th><th>Sessions</th></tr></thead><tbody>${catRows}</tbody></table>`:`<p style="padding:12px;margin:0;color:var(--muted)">No rubric scores in this export.</p>`}</div>
   </div>`;
-  const mark=()=>{ const dr=state.drafts[x.id]; dr.subject=$("eSub").value; if($("eBody")) dr.body=$("eBody").value; dr.edited=true;
-    $("bMail").href=mailtoFor(x,dr); };
-  $("eSub").addEventListener("input",mark); if($("eBody")) $("eBody").addEventListener("input",mark);
-  $("bAI").onclick=()=>writeAI(x.id);
-  $("bPreview").onclick=()=>{ state.preview=!state.preview; render(); };
+  const mark=()=>{ const dr=state.drafts[x.id]; dr.subject=$("eSub").value; dr.html=$("eBody").innerHTML; dr.edited=true; };
+  $("eSub").addEventListener("input",mark); $("eBody").addEventListener("input",mark);
   $("bCopy").onclick=()=>{ const dr=state.drafts[x.id];
-    copyText(`${headerText(x,dr)}\n\n${mdToPlain(dr.body)}`,"Email copied",headerHtml(x,dr)+mdToHtml(dr.body)); };
-  $("bRule").onclick=()=>{ state.drafts[x.id]={source:"rule",subject:x.baseline.subject,body:x.baseline.body,edited:false,warnings:[],skey:skey()}; render(); };
+    copyText(`${headerText(x,dr)}\n\n${emailText(dr)}`,"Email copied",headerHtml(x,dr)+emailHtml(dr)); };
+  $("bSend").onclick=()=>sendEmail(x.id);
+}
+
+// The email as formatted HTML (the edited version when it was changed on the page) and as plain text
+const emailHtml=d=>d.html!=null?d.html:mdToHtml(d.body);
+function emailText(d){
+  if(d.html==null) return mdToPlain(d.body);
+  const el=document.createElement("div"); el.innerHTML=d.html;
+  el.style.position="fixed"; el.style.left="-9999px"; document.body.appendChild(el);
+  const t=el.innerText; el.remove(); return t.replace(/\n{3,}/g,"\n\n").trim();
+}
+
+// Send goes through the server (/api/send), which passes it on to the email API once that is set up
+async function sendEmail(id){
+  const x=inst(id), d=state.drafts[id]; if(!x||!d||state.sending[id]) return;
+  const cc=ccFor(x);
+  if(!confirm(`Send this email to ${x.email}${cc?`\nCC: ${cc}`:""}?`)) return;
+  state.sending[id]=true; render();
+  try{
+    const r=await fetch("/api/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+      instructor_id:x.id, instructor_name:x.name, to:x.email, cc:cc?cc.split(", "):[], subject:d.subject,
+      html:emailHtml(d), text:emailText(d)})});
+    const j=await r.json().catch(()=>({error:`The server returned an error (${r.status}).`}));
+    if(!r.ok||j.error) throw new Error(j.error||`The server returned an error (${r.status}).`);
+    state.sent[id]=new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"});
+    toast(`Email sent to ${x.name}`);
+  }catch(e){ toast(e.message); }
+  delete state.sending[id]; render();
 }
 
 // The email body uses light Markdown: "### " headings, "**bold**", "- " bullets, "1. " lists.
@@ -519,7 +537,6 @@ function mdToHtml(md){
 const mdToPlain=md=>String(md||"").split("\n").map(l=>l.replace(/^#{1,6}\s+/,"").replace(/\*\*(.+?)\*\*/g,"$1")).join("\n");
 const headerText=(x,d)=>`To: ${x.email}\nCC: ${ccFor(x)}\nSubject: ${d.subject}`;
 const headerHtml=(x,d)=>`<p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#555;margin:0 0 12px">To: ${esc(x.email)}<br>CC: ${esc(ccFor(x))}<br>Subject: ${esc(d.subject)}</p>`;
-const mailtoFor=(x,d)=>`mailto:${encodeURIComponent(x.email)}?cc=${encodeURIComponent(ccFor(x))}&subject=${encodeURIComponent(d.subject)}&body=${encodeURIComponent(mdToPlain(d.body))}`;
 
 function copyText(text,msg,html){
   const done=()=>toast(msg);
@@ -559,8 +576,8 @@ let tmr; $("settings").addEventListener("input",e=>{
 $("aiAll").addEventListener("click",writeAll);
 $("copyAll").addEventListener("click",()=>{
   const F=groups().flagged;
-  const text=F.map(x=>{ const d=state.drafts[x.id]; return `${headerText(x,d)}\n\n${mdToPlain(d.body)}`; }).join("\n\n---------------------------------------------\n\n");
-  const html=F.map(x=>{ const d=state.drafts[x.id]; return headerHtml(x,d)+mdToHtml(d.body); }).join(`<hr style="margin:24px 0">`);
+  const text=F.map(x=>{ const d=state.drafts[x.id]; return `${headerText(x,d)}\n\n${emailText(d)}`; }).join("\n\n---------------------------------------------\n\n");
+  const html=F.map(x=>{ const d=state.drafts[x.id]; return headerHtml(x,d)+emailHtml(d); }).join(`<hr style="margin:24px 0">`);
   copyText(text,`${F.length} emails copied`,html);
 });
 $("rubricInput").addEventListener("change",async ev=>{

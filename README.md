@@ -37,6 +37,10 @@ fails, a rule-based draft is always available.
      `capability_managers.xlsx`. If none matches, the export's `capability_manager_email` column is used
    - `CC_ALLOWED_DOMAINS` – optional, defaults to `nxtwave.co.in,nxtwave.tech`. Capability-manager addresses
      outside these domains are shown on the page but not CC'd
+   - `SEND_API_URL` – optional; the email API the **Send** button uses. The app POSTs JSON
+     `{to, cc, subject, html, text, instructor_id, instructor_name}` to it (`cc` is a list).
+     `SEND_API_TOKEN`, if set, goes in an `Authorization: Bearer` header. Until it's set, Send says
+     sending isn't set up and Copy email still works
    - `APP_PASSWORD` – optional but recommended; the browser will ask for it (any username)
    - To use Claude instead: `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`; `ANTHROPIC_MODEL` is optional and defaults to `claude-haiku-5-5`
 5. Deploy and open the URL.

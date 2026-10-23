@@ -9,6 +9,8 @@ import hmac
 import json
 import os
 import threading
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from flask import Flask, Response, jsonify, request, send_from_directory
@@ -172,6 +174,39 @@ def api_generate():
         cause = f" Cause: {e.__cause__}" if e.__cause__ else ""
         return jsonify(error=f"The AI couldn’t write this email ({type(e).__name__}: {e}).{cause} "
                              "The rule-based draft is still available."), 502
+
+
+@app.post("/api/send")
+def api_send():
+    """Sends one email by passing it on to the email API at SEND_API_URL (POST, JSON body:
+    to, cc, subject, html, text, instructor_id, instructor_name; SEND_API_TOKEN, if set, goes in
+    an 'Authorization: Bearer' header). Until SEND_API_URL is set, nothing is sent."""
+    p = request.get_json(silent=True) or {}
+    to = str(p.get("to") or "").strip()
+    subject = str(p.get("subject") or "").strip()
+    if not to or not subject or not (p.get("html") or p.get("text")):
+        return jsonify(error="The email needs a recipient, a subject and a body."), 400
+    url = os.getenv("SEND_API_URL", "").strip()
+    if not url:
+        return jsonify(error="Sending isn’t set up yet. Use Copy email for now."), 501
+    msg = {"to": to, "cc": [str(c).strip() for c in (p.get("cc") or []) if str(c).strip()], "subject": subject,
+           "html": p.get("html") or "", "text": p.get("text") or "",
+           "instructor_id": p.get("instructor_id"), "instructor_name": p.get("instructor_name")}
+    headers = {"Content-Type": "application/json"}
+    token = os.getenv("SEND_API_TOKEN", "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        req = urllib.request.Request(url, data=json.dumps(msg).encode(), headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=30) as r:
+            r.read()
+    except urllib.error.HTTPError as e:
+        app.logger.error("send failed: %s %s", e.code, e.read()[:500])
+        return jsonify(error=f"The email API refused the email ({e.code})."), 502
+    except Exception as e:  # noqa: BLE001
+        app.logger.exception("send failed")
+        return jsonify(error=f"Couldn’t reach the email API ({e})."), 502
+    return jsonify(ok=True)
 
 
 @app.post("/api/roster")

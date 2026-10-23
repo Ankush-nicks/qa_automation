@@ -10,6 +10,6 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: ANTHROPIC_MODEL
-        value: claude-sonnet-5-5
+        value: claude-haiku-5-5
       - key: APP_PASSWORD
         sync: false

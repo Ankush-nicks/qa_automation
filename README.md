@@ -24,7 +24,7 @@ fails, a rule-based draft is always available.
    - Start command: `gunicorn app:app --workers 2 --threads 4 --timeout 180 --bind 0.0.0.0:$PORT`
 4. Environment variables:
    - `ANTHROPIC_API_KEY` – required for AI emails
-   - `ANTHROPIC_MODEL` – optional, defaults to `claude-sonnet-5-5`
+   - `ANTHROPIC_MODEL` – optional, defaults to `claude-haiku-5-5` (fast); set `claude-sonnet-5-5` for more polished writing
    - `APP_PASSWORD` – optional but recommended; the browser will ask for it (any username)
    - To use OpenAI instead: `LLM_PROVIDER=openai`, `OPENAI_API_KEY`, `OPENAI_MODEL`
 5. Deploy and open the URL.

@@ -124,7 +124,7 @@ def provider_info() -> dict:
     if p == "openai":
         return {"provider": "openai", "model": os.getenv("OPENAI_MODEL", ""),
                 "configured": bool(os.getenv("OPENAI_API_KEY") and os.getenv("OPENAI_MODEL"))}
-    return {"provider": "anthropic", "model": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5"),
+    return {"provider": "anthropic", "model": os.getenv("ANTHROPIC_MODEL", "claude-haiku-5-5"),
             "configured": bool(os.getenv("ANTHROPIC_API_KEY"))}
 
 

@@ -305,7 +305,7 @@ async function writeAll(){
   const ids=groups().flagged.map(x=>x.id).filter(id=>!(state.drafts[id]&&state.drafts[id].source==="ai"&&state.drafts[id].skey===skey()));
   if(!ids.length){ toast("Every flagged email already has an AI draft"); return; }
   let i=0; const worker=async()=>{ while(i<ids.length){ const id=ids[i++]; await writeAI(id); } };
-  await Promise.all([worker(),worker(),worker()]);
+  await Promise.all(Array.from({length:6},worker));
   toast("AI drafts finished");
 }
 

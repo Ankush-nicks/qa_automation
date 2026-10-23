@@ -25,18 +25,19 @@ Hard rules:
 - Only mention a structured improvement plan if DATA.mention_improvement_plan is true.
 - Plain text only. No markdown, no asterisks, no # headings. Use the section headings below in capitals, "- " for
   bullet lists and "1. " for numbered lists.
-- Warm, direct, professional. No threats, no flattery, no filler. Indian/British English. 400–700 words.
+- Warm, direct, professional. No threats, no flattery, no filler. Indian/British English.
+- LENGTH: 300–450 words in the body. Be concise: one short sentence per point, no repetition across sections.
 
 Structure (keep this order and these headings):
 Hi <first name>,
 <one short paragraph: period reviewed, against the updated rubrics, why they are receiving this email>
 YOUR SCORES – each day's average with session count, then the 3-day average across all sessions.
-WHAT'S WORKING – 2–4 sentences, specific (best sessions, strong categories, conduct).
+WHAT'S WORKING – 1–2 sentences, specific (best sessions, strong categories, conduct).
 KEY INSIGHTS – group by session type ("Lecture-format sessions", "Practice sessions", ...). Number the weak categories
-  in order of impact. For each: average, range, weight, then 1–2 sentences explaining in plain words what the
+  in order of impact (at most 3). For each: average, range, weight, then 1 sentence explaining in plain words what the
   current band means and what the next/target band requires, using the RUBRIC CONTEXT. Then the trend line and any
   conduct point.
-ACTION ITEMS – 5–8 numbered, concrete actions tied to the rubric's next/target band (use the rubric's own measurable
+ACTION ITEMS – 4–5 numbered, concrete actions tied to the rubric's next/target band (use the rubric's own measurable
   markers where it gives them, e.g. questions per 15 minutes, talk-time %, coverage %). Last item: observe a
   high-scoring trainer's session this week.
 SUPPORT FROM OUR SIDE – coaching call date and the recordings to review; daily QA check-ins.
@@ -97,8 +98,8 @@ def build_prompt(inst: dict, S: dict, book) -> tuple[str, dict]:
     }
     draft = baseline_email(inst, S)
     user = ("DATA (the only source of facts):\n" + json.dumps(data, ensure_ascii=False, separators=(",", ":")) +
-            "\n\nREFERENCE DRAFT (rule-based; keep its facts and structure, but write it better: make each insight "
-            "specific to the rubric context, and make the action items concrete and measurable):\n"
+            "\n\nREFERENCE DRAFT (rule-based; keep its key facts and structure, but write it "
+            "better and SHORTER (300–450 words): make each insight specific to the rubric context, and make the action items concrete and measurable):\n"
             f"Subject: {draft['subject']}\n\n{draft['body']}")
     return user, data
 
@@ -138,13 +139,13 @@ def _call(user: str) -> str:
     if info["provider"] == "openai":
         from openai import OpenAI
         client = OpenAI(timeout=120)
-        r = client.chat.completions.create(model=info["model"], max_tokens=4000,
+        r = client.chat.completions.create(model=info["model"], max_tokens=1500,
                                            response_format={"type": "json_object"}, messages=[
             {"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user}])
         return r.choices[0].message.content or ""
     from anthropic import Anthropic
     client = Anthropic(timeout=120)
-    msg = client.messages.create(model=info["model"], max_tokens=4000, system=SYSTEM_PROMPT,
+    msg = client.messages.create(model=info["model"], max_tokens=1500, system=SYSTEM_PROMPT,
                                  messages=[{"role": "user", "content": user}])
     return "".join(getattr(b, "text", "") for b in msg.content)
 

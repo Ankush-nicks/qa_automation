@@ -164,6 +164,10 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
 .loading .lt{font-size:17px;font-weight:600;margin:0}
 .loading .ls{color:var(--muted);font-size:14px;margin:0;max-width:56ch}
 .drop.busy>:not(.loading){display:none}
+.topbar{position:fixed;top:0;left:0;right:0;height:4px;overflow:hidden;z-index:30;background:var(--accent-tint)}
+.topbar::before{content:"";position:absolute;inset:0;width:40%;background:var(--accent);animation:tb 1.1s ease-in-out infinite}
+@keyframes tb{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+@media (prefers-reduced-motion:reduce){.topbar::before{animation:none;width:100%}}
 .btn .spin{width:14px;height:14px;border-color:rgba(255,255,255,.35);border-top-color:var(--accent-ink)}
 .listtools{flex-wrap:wrap}
 .listtools input{flex:1 1 100%}
@@ -201,7 +205,7 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
     <div class="err" id="err" role="alert"></div>
     <div class="loading hidden" id="loading" role="status" aria-live="polite">
       <span class="spin" aria-hidden="true"></span>
-      <p class="lt" id="loadTitle">Reading the file…</p>
+      <p class="lt" id="loadTitle">Loading the file… please wait</p>
       <p class="ls" id="loadSub"></p>
     </div>
   </section>
@@ -233,6 +237,7 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
     </div>
   </section>
 </div>
+<div class="topbar hidden" id="topbar" aria-hidden="true"></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -258,11 +263,12 @@ function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("sho
 let loadTimer=null;
 function setLoading(on,name){
   clearInterval(loadTimer);
-  $("drop").classList.toggle("busy",on); $("loading").classList.toggle("hidden",!on);
+  $("drop").classList.toggle("busy",on); $("loading").classList.toggle("hidden",!on); $("topbar").classList.toggle("hidden",!on);
+  if(on) $("drop").scrollIntoView({behavior:"smooth",block:"center"});
   [$("fileInput"),$("fileInput2")].forEach(i=>i.disabled=on);
   if(!on) return;
   const t0=Date.now();
-  $("loadTitle").textContent=`Reading ${name}…`;
+  $("loadTitle").textContent=`Loading ${name}… please wait`;
   const tick=()=>{
     const s=Math.round((Date.now()-t0)/1000);
     $("loadSub").textContent = s<4 ? "Uploading the file and checking scores for each instructor."
@@ -290,15 +296,15 @@ async function analyze(first){
   const S=settings(); if(first){ S.call=""; S.review=""; }
   fd.append("settings",JSON.stringify(S));
   if(first){ $("drop").classList.remove("hidden"); $("app").classList.add("hidden"); $("err").style.display="none"; setLoading(true,state.file.name); }
-  else $("refreshing").classList.remove("hidden");
+  else { $("refreshing").classList.remove("hidden"); $("topbar").classList.remove("hidden"); }
   let j;
   try{
     const r=await fetch("/api/analyze",{method:"POST",body:fd});
     j=await r.json().catch(()=>({error:`The server returned an error (${r.status}).`}));
     if(seq!==analyzeSeq) return;
-    if(!r.ok||j.error){ setLoading(false); $("refreshing").classList.add("hidden"); showErr(j.error||`The server returned an error (${r.status}).`); return; }
-  }catch(e){ if(seq!==analyzeSeq) return; setLoading(false); $("refreshing").classList.add("hidden"); showErr("Couldn’t reach the server. Check your connection and try again."); return; }
-  setLoading(false); $("refreshing").classList.add("hidden");
+    if(!r.ok||j.error){ setLoading(false); $("refreshing").classList.add("hidden"); $("topbar").classList.add("hidden"); showErr(j.error||`The server returned an error (${r.status}).`); return; }
+  }catch(e){ if(seq!==analyzeSeq) return; setLoading(false); $("refreshing").classList.add("hidden"); $("topbar").classList.add("hidden"); showErr("Couldn’t reach the server. Check your connection and try again."); return; }
+  setLoading(false); $("refreshing").classList.add("hidden"); $("topbar").classList.add("hidden");
   state.data=j;
   if(first){
     $("sCall").value=j.settings.call; $("sReview").value=j.settings.review;
@@ -404,7 +410,7 @@ function renderDetail(S){
     <h3>Email</h3>
     ${warns.map(w=>`<div class="warn">${esc(w)}</div>`).join("")}
     <p class="source">${src}</p>
-    ${busy?`<div class="busyline"><span class="spin" aria-hidden="true"></span>Writing with AI from the scores and rubric. This usually takes 10–20 seconds.</div>`:""}
+    ${busy?`<div class="busyline"><span class="spin" aria-hidden="true"></span>Writing with AI from the scores and rubric. This usually takes about 10 seconds.</div>`:""}
     <div class="letterhead">
       <label for="eTo">To</label><input id="eTo" value="${esc(x.email)}" readonly>
       <label for="eCc">CC</label><input id="eCc" value="${esc(x.managers)}" readonly title="Manager names from the export; add their email addresses in your mail app">

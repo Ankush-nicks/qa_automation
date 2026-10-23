@@ -182,7 +182,7 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
   <header class="top">
     <div>
       <h1>QA email drafts</h1>
-      <p class="sub">Upload the 3-day instructor QA export. Flagged instructors get an email written by AI from their scores and the updated rubrics, with a rule-based draft as a fallback.</p>
+      <p class="sub">Upload the instructor QA export (last 7 days). Each instructor is judged on their last 3 days with QA reviews; days without reviews are skipped. Flagged instructors get an email written by AI from their scores and the updated rubrics, with a rule-based draft as a fallback.</p>
     </div>
     <div class="filebar hidden" id="filebar">
       <span id="fileName"></span>
@@ -219,7 +219,7 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
     <div class="settings" id="settings">
       <div class="field"><label for="sThr">Score threshold</label><input id="sThr" type="number" step="0.1" min="0" max="10" value="5"></div>
       <div class="field"><label for="sRule">At or below threshold on</label>
-        <select id="sRule"><option value="all3">All 3 days</option><option value="available">Every day with sessions</option><option value="avg3">3-day average</option></select></div>
+        <select id="sRule"><option value="all3">All last 3 QA days</option><option value="available">Every QA day (2 or more)</option><option value="avg3">Average of last 3 QA days</option></select></div>
       <div class="field"><label for="sGoal">Target by review date</label><input id="sGoal" type="number" step="0.1" min="0" max="10" value="6"></div>
       <div class="field"><label for="sReview">Review date</label><input id="sReview" type="date"></div>
       <div class="field wide"><label for="sCc">Always CC (emails, comma-separated)</label><input id="sCc" type="text" placeholder="riya@…, prudhvi@…"></div>
@@ -333,7 +333,7 @@ async function analyze(first){
     state.file=state.prevFile||null;
     setLoading(false); $("refreshing").classList.add("hidden"); $("topbar").classList.add("hidden");
     if(state.data){ $("drop").classList.add("hidden"); $("app").classList.remove("hidden"); render(); toast(ok?"Roster loaded":"Roster not loaded: no manager emails"); }
-    else if(ok) showInfo(`Roster loaded: ${j.roster.count} instructors with a capability manager. Now upload the 3-day QA export.`);
+    else if(ok) showInfo(`Roster loaded: ${j.roster.count} instructors with a capability manager. Now upload the QA export (last 7 days).`);
     else showErr(emptyRoster(j.roster));
     return;
   }
@@ -389,7 +389,7 @@ function render(){
   if(!state.data) return;
   const S=settings(), G=groups(), T=S.threshold, D=state.data;
   const escCount=G.esc.reduce((a,x)=>a+x.escalations.length,0);
-  const ruleText={all3:`at or below ${fT(T)} on all three days`,available:`at or below ${fT(T)} on every day with sessions`,avg3:`at or below ${fT(T)} on the 3-day average`}[S.rule];
+  const ruleText={all3:`at or below ${fT(T)} on each of their last 3 QA days`,available:`at or below ${fT(T)} on every recent QA day`,avg3:`at or below ${fT(T)} on the average of their last 3 QA days`}[S.rule];
   $("summary").innerHTML=`${D.instructors.length} instructors in this export${D.skipped?` (${D.skipped} row${D.skipped===1?"":"s"} couldn’t be read and ${D.skipped===1?"was":"were"} skipped)`:""}. <b>${G.flagged.length}</b> ${G.flagged.length===1?"is":"are"} ${ruleText}, ${G.watch.length} ${G.watch.length===1?"is":"are"} close to the line, and ${escCount} session${escCount===1?"":"s"} need${escCount===1?"s":""} an escalation check.`;
   const tabs=[["flagged","Flagged",G.flagged.length],["watch","Close to the line",G.watch.length],["esc","Escalation checks",G.esc.length],["all","All",G.all.length]];
   $("tabs").innerHTML=tabs.map(([k,l,c])=>`<button class="tab" data-tab="${k}" aria-pressed="${state.tab===k}">${l} (${c})</button>`).join("");

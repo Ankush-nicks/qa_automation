@@ -1,6 +1,6 @@
 """QA email drafts – Flask app.
 
-Upload the 3-day instructor QA export, see who is flagged, and write each
+Upload the instructor QA export (last 7 days), see who is flagged, and write each
 instructor's email with an LLM (falls back to a rule-based draft)."""
 from __future__ import annotations
 

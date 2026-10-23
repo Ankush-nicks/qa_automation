@@ -1,5 +1,6 @@
-"""Reads the 3-day instructor QA export, works out who is flagged, and builds
-the facts (and a rule-based fallback email) for each instructor."""
+"""Reads the instructor QA export (e.g. the last 7 days), keeps each instructor's
+last three days that have QA reviews, works out who is flagged, and builds the
+facts (and a rule-based fallback email) for each instructor."""
 from __future__ import annotations
 
 import io
@@ -33,8 +34,8 @@ WEIGHTS = {
                  "student engagement and independence": .1, "doubt resolution and practice session facilitation": .5},
     "Invigilation": {"invigilation and environment control": .5, CONDUCT: .5},
 }
-REQUIRED = ["instructor_name", "day1_average", "day2_average", "day3_average",
-            "qa_reports_json", "session_rubric_evidence_json"]
+REQUIRED = ["instructor_name", "qa_reports_json", "session_rubric_evidence_json"]
+QA_DAYS = 3  # number of most recent days with QA reviews used per instructor
 
 
 def is_tech_like(cat: str) -> bool:
@@ -239,6 +240,17 @@ def t_short(dt):
     return f"{h}:{m[2]} {ap}"
 
 
+def period_label(dates, long=False):
+    """'21–23 October' for consecutive days, '17, 20 and 23 October' when days were skipped."""
+    ds = sorted(d for d in (pd_date(x) for x in dates) if d)
+    if len(ds) > 1 and any((b - a).days > 1 for a, b in zip(ds, ds[1:])):
+        M = MONTHS_L if long else MONTHS
+        if all(d.month == ds[-1].month for d in ds):
+            return f"{join_and([str(d.day) for d in ds])} {M[ds[-1].month - 1]}"
+        return join_and([f"{d.day} {M[d.month - 1]}" for d in ds])
+    return range_label(dates, long)
+
+
 def range_label(dates, long=False):
     ds = [pd_date(x) for x in dates]
     ds = [d for d in ds if d]
@@ -318,7 +330,7 @@ def read_export(data: bytes, filename: str) -> pd.DataFrame:
     if missing:
         found = ", ".join(list(df.columns)[:8])
         raise ValueError(f"This file is missing {'columns' if len(missing) > 1 else 'a column'}: {', '.join(missing)}. "
-                         f"Columns found: {found}. Upload the original 3-day QA export.")
+                         f"Columns found: {found}. Upload the instructor QA export (e.g. last 7 days).")
     return df.fillna("")
 
 
@@ -327,8 +339,6 @@ def read_export(data: bytes, filename: str) -> pd.DataFrame:
 # --------------------------------------------------------------------------
 def build_instructor(r: dict, idx: int) -> dict:
     ok = lambda o: isinstance(o, dict)  # noqa: E731
-    days = [{"date": norm_date(r.get(f"day{i}_date")), "avg": num(r.get(f"day{i}_average")),
-             "count": int(num(r.get(f"day{i}_evaluation_count")) or 0)} for i in (1, 2, 3)]
     qa_raw = safe_json(r.get("qa_reports_json"), [])
     qa = [q for q in qa_raw if ok(q)] if isinstance(qa_raw, list) else []
     ev_raw = safe_json(r.get("session_rubric_evidence_json"), [])
@@ -360,6 +370,30 @@ def build_instructor(r: dict, idx: int) -> dict:
                          "score": sc, "start": e["start"] if e else "", "type": e["type"] if e else "Unmapped"})
     sessions.sort(key=lambda s: f"{s['date']}{s['start']}")
 
+    # Daily averages: dayN_* columns (any number of days), then daily_summary_json,
+    # then the mean of that day's session scores. Days without QA are skipped and
+    # only the last QA_DAYS days with reviews are kept.
+    by_date: dict = {}
+    for i in range(1, 32):
+        d, a = norm_date(r.get(f"day{i}_date")), num(r.get(f"day{i}_average"))
+        if d and a is not None:
+            by_date.setdefault(d, {"date": d, "avg": a, "count": int(num(r.get(f"day{i}_evaluation_count")) or 0)})
+    ds_raw = safe_json(r.get("daily_summary_json"), [])
+    for x in (ds_raw if isinstance(ds_raw, list) else []):
+        d = norm_date(x.get("session_date")) if ok(x) else None
+        a = num(x.get("daily_average")) if ok(x) else None
+        if d and a is not None:
+            by_date.setdefault(d, {"date": d, "avg": a, "count": int(num(x.get("evaluation_count")) or 0)})
+    for d in {s["date"] for s in sessions if s["date"]}:
+        sc = [s["score"] for s in sessions if s["date"] == d]
+        by_date.setdefault(d, {"date": d, "avg": round(_mean(sc), 2), "count": len(sc)})
+    days = [by_date[d] for d in sorted(by_date)][-QA_DAYS:]
+    keep = {d["date"] for d in days}
+    for d in days:  # session count from the export can be 0 when the average came from elsewhere
+        d["count"] = d["count"] or sum(1 for s in sessions if s["date"] == d["date"])
+    sessions = [s for s in sessions if s["date"] in keep]
+    evid = [e for e in evid if e["date"] in keep]
+
     cat = {}
     for e in evid:
         for k, v in e["scores"].items():
@@ -385,7 +419,7 @@ def build_instructor(r: dict, idx: int) -> dict:
 def evaluate(inst: dict, S: dict) -> dict:
     T = S["threshold"]
     vals = [d["avg"] for d in inst["days"] if d["avg"] is not None]
-    all3 = all(d["avg"] is not None and d["avg"] <= T for d in inst["days"])
+    all3 = len(vals) >= QA_DAYS and all(v <= T for v in vals)
     avail = len(vals) >= 2 and all(v <= T for v in vals)
     avg3 = bool(vals) and mean(vals) <= T
     flagged = all3 if S["rule"] == "all3" else avail if S["rule"] == "available" else avg3
@@ -403,11 +437,12 @@ def build_plan(inst: dict, S: dict) -> dict:
     vals = [d["avg"] for d in inst["days"] if d["avg"] is not None]
     rule = S["rule"]
     if ev["flagged"] and rule == "all3":
-        reason = f"Your daily average was {'below' if all(v < T for v in vals) else 'at or below'} {fT(T)} on all three days."
+        reason = (f"Your daily average was {'below' if all(v < T for v in vals) else 'at or below'} {fT(T)} on each of "
+                  f"your last three days with QA reviews.")
     elif ev["flagged"] and rule == "available":
-        reason = f"Your daily average was at or below {fT(T)} on every day you had evaluated sessions."
+        reason = f"Your daily average was at or below {fT(T)} on every recent day you had evaluated sessions."
     elif ev["flagged"]:
-        reason = f"Your average across the three days was {f2(ev['mean3'])}, which is at or below {fT(T)}."
+        reason = f"Your average across your last three days with QA reviews was {f2(ev['mean3'])}, which is at or below {fT(T)}."
     else:
         reason = "A few of your scores are below where we’d like them to be."
 
@@ -508,7 +543,7 @@ def build_plan(inst: dict, S: dict) -> dict:
     return {
         "first_name": first_name(inst["name"]),
         "subject": f"QA Review ({range_label(dates)}): Action plan for next week",
-        "period": range_label(dates, long=True),
+        "period": period_label(dates, long=True),
         "reason": reason, "flagged": ev["flagged"],
         "days": [{"date": d_short(d["date"]), "avg": None if d["avg"] is None else f2(d["avg"]), "sessions": d["count"]}
                  for d in inst["days"] if d["date"]],
@@ -533,7 +568,7 @@ def baseline_email(inst: dict, S: dict) -> dict:
         L.append(f"- {d['date']}: no evaluated sessions" if d["avg"] is None
                  else f"- {d['date']}: {d['avg']} ({d['sessions']} session{'' if d['sessions'] == 1 else 's'})")
     if P["overall"]:
-        L.append(f"- 3-day average across all {P['session_count']} sessions: {P['overall']}")
+        L.append(f"- Average across all {P['session_count']} sessions: {P['overall']}")
     L.append("")
     if P["working"]:
         L += ["WHAT’S WORKING", " ".join(P["working"]), ""]

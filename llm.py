@@ -31,7 +31,8 @@ Hard rules:
 Structure (keep this order and these headings):
 Hi <first name>,
 <one short paragraph: period reviewed, against the updated rubrics, why they are receiving this email>
-YOUR SCORES – each day's average with session count, then the 3-day average across all sessions.
+YOUR SCORES – each day's average with session count, then the average across all sessions. These are the
+  instructor's last three days with QA reviews (days without reviews are skipped), so don't call them consecutive.
 WHAT'S WORKING – 1–2 sentences, specific (best sessions, strong categories, conduct).
 KEY INSIGHTS – group by session type ("Lecture-format sessions", "Practice sessions", ...). Number the weak categories
   in order of impact (at most 3). For each: average, range, weight, then 1 sentence explaining in plain words what the
@@ -74,7 +75,7 @@ def build_prompt(inst: dict, S: dict, book) -> tuple[str, dict]:
         "period_reviewed": P["period"],
         "why_receiving_this_email": P["reason"],
         "daily_averages": P["days"],
-        "three_day_average_all_sessions": P["overall"], "session_count": P["session_count"],
+        "average_all_sessions": P["overall"], "session_count": P["session_count"],
         "sessions": [{"date": d_short(s["date"]), "time": t_short(s["start"]), "title": s["title"],
                       "session_type": s["type"], "score": f2(s["score"])} for s in inst["sessions"]],
         "category_averages_by_session_type": {

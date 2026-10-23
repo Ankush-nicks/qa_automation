@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.env
+rubrics/active.xlsx
+rubrics/active.name
+rubrics/upload.tmp.xlsx
+*.zip

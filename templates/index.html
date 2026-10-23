@@ -199,6 +199,7 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
     <span id="rubricStatus"></span>
     <label class="linkbtn" for="rubricInput">Upload a newer rubric workbook</label>
     <input type="file" id="rubricInput" accept=".xlsx,.xlsm">
+    <span id="mgrStatus"></span>
     <span id="rosterStatus">No roster loaded, so only Always CC is used.</span>
     <label class="linkbtn" for="rosterInput">Upload roster (capability managers)</label>
     <input type="file" id="rosterInput" accept=".csv,text/csv">
@@ -223,7 +224,7 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
       <div class="field"><label for="sThr">Score threshold</label><input id="sThr" type="number" step="0.1" min="0" max="10" value="5"></div>
       <div class="field"><label for="sGoal">Target by review date</label><input id="sGoal" type="number" step="0.1" min="0" max="10" value="6"></div>
       <div class="field"><label for="sReview">Review date</label><input id="sReview" type="date"></div>
-      <div class="field wide"><label for="sCc">Always CC (emails, comma-separated)</label><input id="sCc" type="text" placeholder="riya@…, prudhvi@…"></div>
+      <div class="field wide"><label for="sCc">Always CC (emails, comma-separated)</label><input id="sCc" type="text" placeholder="prudhvi@…"></div>
       <div class="field"><label for="sName">Sign off as</label><input id="sName" type="text" value="[Your Name]"></div>
       <div class="field check"><input id="sPlan" type="checkbox" checked><label for="sPlan">Mention improvement plan</label></div>
     </div>
@@ -314,6 +315,13 @@ async function loadStatus(){
   try{
     const r=await fetch("/api/status"); const j=await r.json(); state.llm=j.llm;
     let saved=null; try{ saved=localStorage.getItem("qa.cc"); }catch(_){}
+    // The old default (Riya and Prudhvi on every email) is dropped: Riya is now CC'd as a capability manager
+    const OLD_DEFAULT="riya.rai@nxtwave.co.in,meka.prudhvicharan@nxtwave.co.in";
+    if(saved&&saved.toLowerCase().split(/[,;\s]+/).filter(Boolean).join(",")===OLD_DEFAULT){ saved=null; try{ localStorage.removeItem("qa.cc"); }catch(_){} }
+    state.mgrs=j.managers;
+    $("mgrStatus").textContent = j.managers&&j.managers.count
+      ? `Capability managers: ${j.managers.file} (${j.managers.count}), matched to the names in column F`
+      : "No capability manager list found on the server.";
     if(!$("sCc").value) $("sCc").value = saved || j.cc || "";
     $("aiStatus").innerHTML = j.llm.configured
       ? `<span class="dot on"></span>AI ready (${esc(j.llm.provider==="openai"?"OpenAI":"Claude")}, ${esc(j.llm.model)})`
@@ -452,7 +460,7 @@ function renderDetail(S){
       <div class="meta">${esc(x.email||"No email in export")}</div>
       ${(()=>{ const m=capMgr(x);
         if(m) return `<div class="meta">Capability manager: ${esc(m.name)}</div>`+(m.external.length?`<div class="meta">Not CC’d (outside the company): ${esc(m.external.join(", "))}</div>`:"");
-        return `<div class="meta">${roster?"No capability manager in the roster":"Upload the roster to CC the capability manager"}${x.managers?`. Managers in the export: ${esc(x.managers)}`:""}</div>`; })()}
+        return `<div class="meta">No capability manager found${state.mgrs&&state.mgrs.count?" from the list":""}${x.managers?` among: ${esc(x.managers)}`:" (no manager names in the export)"}</div>`; })()}
     </div>${marks}</div>
     ${x.notes.length?`<h3>Check before sending</h3><div class="notes"><ul>${x.notes.map(n=>`<li>${esc(n)}</li>`).join("")}</ul></div>`:""}
     <h3>Sessions</h3>
@@ -465,7 +473,7 @@ function renderDetail(S){
     ${busy?`<div class="busyline"><span class="spin" aria-hidden="true"></span>Writing with AI from the scores and rubric. This usually takes about 10 seconds.</div>`:""}
     <div class="letterhead">
       <label for="eTo">To</label><input id="eTo" value="${esc(x.email)}" readonly>
-      <label for="eCc">CC</label><input id="eCc" value="${esc(ccFor(x))}" readonly title="Always CC plus the capability manager from the roster">
+      <label for="eCc">CC</label><input id="eCc" value="${esc(ccFor(x))}" readonly title="Always CC plus the instructor’s capability manager">
       <label for="eSub">Subject</label><input id="eSub" value="${esc(d?d.subject:"")}">
     </div>
     <textarea class="letter" id="eBody" spellcheck="true" aria-label="Email body">${esc(d?d.body:"")}</textarea>

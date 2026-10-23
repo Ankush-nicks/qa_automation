@@ -12,11 +12,13 @@ fails, a rule-based draft is always available.
 ## Files
 - `app.py` – Flask web app (routes, password, rubric upload)
 - `qa_engine.py` – reads the export, flags instructors, builds the facts and the rule-based draft
-- `roster.py` – reads the roster export and maps each instructor to their capability manager emails
+- `managers.py` – reads the capability manager list and finds each instructor's manager among the names in the export's `instructor_manager_name` column (column F)
+- `roster.py` – reads the optional roster export (another way to map instructors to capability manager emails)
 - `rubrics.py` – reads the rubric workbook and pulls sub-rubric definitions and score bands
 - `llm.py` – writes the email with OpenAI gpt-4o-mini (default) or Claude, and checks the numbers it used
 - `templates/index.html` – the page
 - `rubrics/Updated_Rubrics_and_Scoring.xlsx` – the rubric workbook the AI uses
+- `capability_managers.xlsx` – capability manager names and emails (columns `Capability Manager Name`, `Capability Manager Email`). To change it, edit the file and push
 
 ## Deploy on Render (Web Service)
 1. Push this folder to a GitHub repository (keep the folder structure).
@@ -29,8 +31,10 @@ fails, a rule-based draft is always available.
 4. Environment variables:
    - `OPENAI_API_KEY` – required for AI emails
    - `OPENAI_MODEL` – optional, defaults to `gpt-4o-mini` (fast)
-   - `CC_EMAILS` – optional, comma-separated addresses to CC on every email; defaults to Riya
-     (`riya.rai@nxtwave.co.in`) and Prudhvi (`meka.prudhvicharan@nxtwave.co.in`). Can also be changed in the page's "Always CC" field
+   - `CC_EMAILS` – optional, comma-separated addresses to CC on every email; defaults to Prudhvi
+     (`meka.prudhvicharan@nxtwave.co.in`). Can also be changed in the page's "Always CC" field.
+     Each email also CCs the instructor's capability manager: the name in column F that appears in
+     `capability_managers.xlsx`. If none matches, the export's `capability_manager_email` column is used
    - `CC_ALLOWED_DOMAINS` – optional, defaults to `nxtwave.co.in,nxtwave.tech`. Capability-manager addresses
      outside these domains are shown on the page but not CC'd
    - `APP_PASSWORD` – optional but recommended; the browser will ask for it (any username)

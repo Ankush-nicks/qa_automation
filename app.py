@@ -14,6 +14,7 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, request, send_from_directory
 
 import llm
+from managers import load_managers, match_managers
 from qa_engine import analyze, read_export
 from roster import parse_roster, read_roster, split_cc
 from rubrics import RubricBook
@@ -22,7 +23,21 @@ BASE = Path(__file__).parent
 RUBRIC_DIR = Path(os.getenv("RUBRIC_DIR", BASE / "rubrics"))
 ACTIVE = RUBRIC_DIR / "active.xlsx"
 # CC'd on every email unless CC_EMAILS overrides it
-DEFAULT_CC = "riya.rai@nxtwave.co.in, meka.prudhvicharan@nxtwave.co.in"
+DEFAULT_CC = "meka.prudhvicharan@nxtwave.co.in"
+# Capability manager names and emails; each instructor's manager is found among the
+# names in the export's instructor_manager_name column (column F) and CC'd
+MANAGERS_FILE = Path(os.getenv("MANAGERS_FILE", BASE / "capability_managers.xlsx"))
+_mgr_cache: dict = {"key": None, "map": {}}
+
+
+def manager_map() -> dict:
+    if not MANAGERS_FILE.exists():
+        return {}
+    key = MANAGERS_FILE.stat().st_mtime
+    with _lock:
+        if _mgr_cache["key"] != key:
+            _mgr_cache.update(key=key, map=load_managers(MANAGERS_FILE))
+        return _mgr_cache["map"]
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
@@ -98,7 +113,8 @@ def healthz():
 @app.get("/api/status")
 def status():
     _, name = rubric_book()
-    return jsonify({"llm": llm.provider_info(), "rubric": name, "cc": os.getenv("CC_EMAILS", "").strip() or DEFAULT_CC})
+    return jsonify({"llm": llm.provider_info(), "rubric": name, "cc": os.getenv("CC_EMAILS", "").strip() or DEFAULT_CC,
+                    "managers": {"file": MANAGERS_FILE.name, "count": len(manager_map())}})
 
 
 @app.post("/api/analyze")
@@ -111,13 +127,22 @@ def api_analyze():
         S = parse_settings(json.loads(request.form.get("settings") or "{}"))
         df = read_export(data, f.filename)
         out = analyze(df, S)
-        if "capability_manager_email" in df.columns:  # newer exports carry the manager emails themselves
-            rows = {str(r.get("instructor_user_id") or i): r for i, r in enumerate(df.to_dict(orient="records"))}
-            for x in out["instructors"]:
-                r = rows.get(x["id"], {})
-                cc, external = split_cc(r.get("capability_manager_email") or "")
-                if cc or external:
-                    x["capmgr"] = {"name": (r.get("capability_manager_name") or "").strip(), "cc": cc, "external": external}
+        mgrs = manager_map()
+        rows = {str(r.get("instructor_user_id") or i): r for i, r in enumerate(df.to_dict(orient="records"))}
+        for x in out["instructors"]:
+            # 1) the capability manager list, matched against the names in column F
+            found = match_managers(x.get("managers"), mgrs)
+            if found:
+                cc, external = split_cc(", ".join(m["email"] for m in found))
+                x["capmgr"] = {"name": ", ".join(m["name"] for m in found), "cc": cc, "external": external,
+                               "source": "list"}
+                continue
+            # 2) otherwise the manager emails some exports carry themselves
+            r = rows.get(x["id"], {})
+            cc, external = split_cc(r.get("capability_manager_email") or "")
+            if cc or external:
+                x["capmgr"] = {"name": (r.get("capability_manager_name") or "").strip(), "cc": cc, "external": external,
+                               "source": "export"}
     except ValueError as e:
         roster = read_roster(data)  # the roster export dropped in the wrong box
         if roster is not None:

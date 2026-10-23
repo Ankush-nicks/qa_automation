@@ -196,6 +196,9 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
     <span id="rubricStatus"></span>
     <label class="linkbtn" for="rubricInput">Upload a newer rubric workbook</label>
     <input type="file" id="rubricInput" accept=".xlsx,.xlsm">
+    <span id="rosterStatus">No roster loaded, so only Always CC is used.</span>
+    <label class="linkbtn" for="rosterInput">Upload roster (capability managers)</label>
+    <input type="file" id="rosterInput" accept=".csv,text/csv">
   </div>
 
   <section class="drop" id="drop">
@@ -254,6 +257,19 @@ const fT=v=>String(Number(Number(v).toFixed(2)));
 const state={file:null,data:null,drafts:{},tab:"flagged",q:"",sel:null,busy:{},failed:{},llm:null};
 
 const ccList=()=>$("sCc").value.split(/[,;\s]+/).map(s=>s.trim()).filter(Boolean).join(", ");
+// Capability managers from the roster export, kept in this browser until replaced
+const normId=s=>String(s||"").replace(/-/g,"").toLowerCase();
+let roster=null;
+function setRoster(r,save){
+  roster={file:r.file,count:r.count,byId:new Map(),byEmail:new Map()};
+  r.entries.forEach(e=>{ if(e.id) roster.byId.set(e.id,e); if(e.email) roster.byEmail.set(e.email,e); });
+  if(save){ try{ localStorage.setItem("qa.roster",JSON.stringify(r)); }catch(_){} }
+  $("rosterStatus").textContent=`Roster: ${r.file} (${r.count} instructors with a capability manager)`;
+}
+try{ const r=JSON.parse(localStorage.getItem("qa.roster")||"null"); if(r&&r.entries) setRoster(r,false); }catch(_){}
+const capMgr=x=>roster&&(roster.byId.get(normId(x.id))||roster.byEmail.get(String(x.email||"").toLowerCase()))||null;
+const ccFor=x=>{ const m=capMgr(x); const all=[...ccList().split(", "),...(m?m.cc:[])].filter(Boolean);
+  const seen=new Set(); return all.filter(e=>{ const k=e.toLowerCase(); if(seen.has(k)) return false; seen.add(k); return true; }).join(", "); };
 function settings(){
   return {threshold:parseFloat($("sThr").value)||5, rule:$("sRule").value, goal:parseFloat($("sGoal").value)||6,
           review:$("sReview").value, name:$("sName").value.trim(), plan:$("sPlan").checked};
@@ -261,6 +277,7 @@ function settings(){
 const skey=()=>JSON.stringify(settings());
 function scoreClass(v,T){ if(v==null) return "na"; if(v<=T) return "lo"; if(v<T+1) return "md"; return "hi"; }
 function showErr(msg){ const e=$("err"); e.textContent=msg; e.style.display="block"; e.style.background=""; e.style.color=""; $("drop").classList.remove("hidden"); $("app").classList.add("hidden"); }
+function showInfo(msg){ const e=$("err"); e.textContent=msg; e.style.display="block"; e.style.background="var(--ok-bg)"; e.style.color="var(--ok)"; }
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2200); }
 
 let loadTimer=null;
@@ -310,7 +327,15 @@ async function analyze(first){
     if(!r.ok||j.error){ setLoading(false); $("refreshing").classList.add("hidden"); $("topbar").classList.add("hidden"); showErr(j.error||`The server returned an error (${r.status}).`); return; }
   }catch(e){ if(seq!==analyzeSeq) return; setLoading(false); $("refreshing").classList.add("hidden"); $("topbar").classList.add("hidden"); showErr("Couldn’t reach the server. Check your connection and try again."); return; }
   setLoading(false); $("refreshing").classList.add("hidden"); $("topbar").classList.add("hidden");
-  state.data=j;
+  if(j.roster){
+    setRoster(j.roster,true); state.file=state.prevFile||null;
+    setLoading(false); $("refreshing").classList.add("hidden"); $("topbar").classList.add("hidden");
+    toast("Roster loaded");
+    if(state.data){ $("drop").classList.add("hidden"); $("app").classList.remove("hidden"); render(); }
+    else showInfo(`Roster loaded: ${j.roster.count} instructors with a capability manager. Now upload the 3-day QA export.`);
+    return;
+  }
+  state.data=j; state.prevFile=state.file;
   if(first){
     $("sReview").value=j.settings.review;
     state.drafts={}; state.busy={}; state.failed={}; state.tab="flagged";
@@ -399,13 +424,15 @@ function renderDetail(S){
   const canAI=state.llm&&state.llm.configured;
   const src=ai?`AI draft (${esc(d.model||"")})${d.edited?", edited":""}${stale?". Settings have changed since this was written; rewrite to update it.":""}`:`Rule-based draft${d&&d.edited?", edited":""}`;
   const warns=[...(d&&d.warnings||[])].concat(state.failed[x.id]?[state.failed[x.id]]:[]);
-  const mailto=d?`mailto:${encodeURIComponent(x.email)}?cc=${encodeURIComponent(ccList())}&subject=${encodeURIComponent(d.subject)}&body=${encodeURIComponent(d.body)}`:"#";
+  const mailto=d?`mailto:${encodeURIComponent(x.email)}?cc=${encodeURIComponent(ccFor(x))}&subject=${encodeURIComponent(d.subject)}&body=${encodeURIComponent(d.body)}`:"#";
   $("detail").innerHTML=`<div class="detail">
     <div class="dhead"><div>
       <h2>${esc(x.name)}${badge}</h2>
       <div class="meta">${esc(x.category)}${x.institute?", "+esc(x.institute):""}</div>
       <div class="meta">${esc(x.email||"No email in export")}</div>
-      ${x.managers?`<div class="meta">Managers: ${esc(x.managers)}</div>`:""}
+      ${(()=>{ const m=capMgr(x);
+        if(m) return `<div class="meta">Capability manager: ${esc(m.name)}</div>`+(m.external.length?`<div class="meta">Not CC’d (outside the company): ${esc(m.external.join(", "))}</div>`:"");
+        return `<div class="meta">${roster?"No capability manager in the roster":"Upload the roster to CC the capability manager"}${x.managers?`. Managers in the export: ${esc(x.managers)}`:""}</div>`; })()}
     </div>${marks}</div>
     ${x.notes.length?`<h3>Check before sending</h3><div class="notes"><ul>${x.notes.map(n=>`<li>${esc(n)}</li>`).join("")}</ul></div>`:""}
     <h3>Sessions</h3>
@@ -418,7 +445,7 @@ function renderDetail(S){
     ${busy?`<div class="busyline"><span class="spin" aria-hidden="true"></span>Writing with AI from the scores and rubric. This usually takes about 10 seconds.</div>`:""}
     <div class="letterhead">
       <label for="eTo">To</label><input id="eTo" value="${esc(x.email)}" readonly>
-      <label for="eCc">CC</label><input id="eCc" value="${esc(ccList())}" readonly title="Set in Always CC above${x.managers?`. Managers in the export: ${esc(x.managers)}`:""}">
+      <label for="eCc">CC</label><input id="eCc" value="${esc(ccFor(x))}" readonly title="Always CC plus the capability manager from the roster">
       <label for="eSub">Subject</label><input id="eSub" value="${esc(d?d.subject:"")}">
     </div>
     <textarea class="letter" id="eBody" spellcheck="true" aria-label="Email body">${esc(d?d.body:"")}</textarea>
@@ -430,10 +457,10 @@ function renderDetail(S){
     </div>
   </div>`;
   const mark=()=>{ const dr=state.drafts[x.id]; dr.subject=$("eSub").value; dr.body=$("eBody").value; dr.edited=true;
-    $("bMail").href=`mailto:${encodeURIComponent(x.email)}?cc=${encodeURIComponent(ccList())}&subject=${encodeURIComponent(dr.subject)}&body=${encodeURIComponent(dr.body)}`; };
+    $("bMail").href=`mailto:${encodeURIComponent(x.email)}?cc=${encodeURIComponent(ccFor(x))}&subject=${encodeURIComponent(dr.subject)}&body=${encodeURIComponent(dr.body)}`; };
   $("eSub").addEventListener("input",mark); $("eBody").addEventListener("input",mark);
   $("bAI").onclick=()=>writeAI(x.id);
-  $("bCopy").onclick=()=>{ const dr=state.drafts[x.id]; copyText(`To: ${x.email}\nCC: ${ccList()}\nSubject: ${dr.subject}\n\n${dr.body}`,"Email copied"); };
+  $("bCopy").onclick=()=>{ const dr=state.drafts[x.id]; copyText(`To: ${x.email}\nCC: ${ccFor(x)}\nSubject: ${dr.subject}\n\n${dr.body}`,"Email copied"); };
   $("bRule").onclick=()=>{ state.drafts[x.id]={source:"rule",subject:x.baseline.subject,body:x.baseline.body,edited:false,warnings:[],skey:skey()}; render(); };
 }
 
@@ -459,7 +486,7 @@ let tmr; $("settings").addEventListener("input",e=>{
   clearTimeout(tmr); tmr=setTimeout(()=>analyze(false),450); });
 $("aiAll").addEventListener("click",writeAll);
 $("copyAll").addEventListener("click",()=>{
-  const text=groups().flagged.map(x=>{ const d=state.drafts[x.id]; return `To: ${x.email}\nCC: ${ccList()}\nSubject: ${d.subject}\n\n${d.body}`; }).join("\n\n---------------------------------------------\n\n");
+  const text=groups().flagged.map(x=>{ const d=state.drafts[x.id]; return `To: ${x.email}\nCC: ${ccFor(x)}\nSubject: ${d.subject}\n\n${d.body}`; }).join("\n\n---------------------------------------------\n\n");
   copyText(text,`${groups().flagged.length} emails copied`);
 });
 $("rubricInput").addEventListener("change",async ev=>{
@@ -468,6 +495,14 @@ $("rubricInput").addEventListener("change",async ev=>{
   try{ const r=await fetch("/api/rubrics",{method:"POST",body:fd}); const j=await r.json();
     if(!r.ok||j.error){ toast(j.error||"Upload failed"); return; }
     $("rubricStatus").textContent=`Rubrics: ${j.rubric}`; toast("Rubric workbook updated");
+  }catch(e){ toast("Couldn’t reach the server."); }
+});
+$("rosterInput").addEventListener("change",async ev=>{
+  const f=ev.target.files[0]; ev.target.value=""; if(!f) return;
+  const fd=new FormData(); fd.append("roster",f);
+  try{ const r=await fetch("/api/roster",{method:"POST",body:fd}); const j=await r.json().catch(()=>({error:`The server returned an error (${r.status}).`}));
+    if(!r.ok||j.error){ toast(j.error||"Upload failed"); return; }
+    setRoster(j.roster,true); toast("Roster loaded"); if(state.data) render();
   }catch(e){ toast("Couldn’t reach the server."); }
 });
 loadStatus();

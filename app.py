@@ -15,6 +15,7 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 
 import llm
 from qa_engine import analyze, read_export
+from roster import parse_roster, read_roster
 from rubrics import RubricBook
 
 BASE = Path(__file__).parent
@@ -106,11 +107,15 @@ def api_analyze():
     f = request.files.get("export")
     if not f or not f.filename:
         return jsonify(error="Choose the QA export file first."), 400
+    data = f.read()
     try:
         S = parse_settings(json.loads(request.form.get("settings") or "{}"))
-        df = read_export(f.read(), f.filename)
+        df = read_export(data, f.filename)
         out = analyze(df, S)
     except ValueError as e:
+        roster = read_roster(data)  # the roster export dropped in the wrong box
+        if roster is not None:
+            return jsonify(roster={**parse_roster(roster), "file": f.filename})
         return jsonify(error=str(e)), 400
     except Exception as e:  # noqa: BLE001
         app.logger.exception("analyze failed")
@@ -136,6 +141,18 @@ def api_generate():
         cause = f" Cause: {e.__cause__}" if e.__cause__ else ""
         return jsonify(error=f"The AI couldn’t write this email ({type(e).__name__}: {e}).{cause} "
                              "The rule-based draft is still available."), 502
+
+
+@app.post("/api/roster")
+def api_roster():
+    f = request.files.get("roster")
+    if not f or not f.filename:
+        return jsonify(error="Choose the roster file first."), 400
+    df = read_roster(f.read())
+    if df is None:
+        return jsonify(error="This doesn’t look like the roster export. It needs instructor_user_id and "
+                             "capability_manager_email columns."), 400
+    return jsonify(roster={**parse_roster(df), "file": f.filename})
 
 
 @app.post("/api/rubrics")

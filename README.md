@@ -9,6 +9,7 @@ fails, a rule-based draft is always available.
 ## Files
 - `app.py` – Flask web app (routes, password, rubric upload)
 - `qa_engine.py` – reads the export, flags instructors, builds the facts and the rule-based draft
+- `roster.py` – reads the roster export and maps each instructor to their capability manager emails
 - `rubrics.py` – reads the rubric workbook and pulls sub-rubric definitions and score bands
 - `llm.py` – writes the email with OpenAI gpt-4o-mini (default) or Claude, and checks the numbers it used
 - `templates/index.html` – the page
@@ -27,6 +28,8 @@ fails, a rule-based draft is always available.
    - `OPENAI_MODEL` – optional, defaults to `gpt-4o-mini` (fast)
    - `CC_EMAILS` – optional, comma-separated addresses to CC on every email; defaults to Riya
      (`riya.rai@nxtwave.co.in`) and Prudhvi (`meka.prudhvicharan@nxtwave.co.in`). Can also be changed in the page's "Always CC" field
+   - `CC_ALLOWED_DOMAINS` – optional, defaults to `nxtwave.co.in,nxtwave.tech`. Capability-manager addresses
+     outside these domains are shown on the page but not CC'd
    - `APP_PASSWORD` – optional but recommended; the browser will ask for it (any username)
    - To use Claude instead: `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`; `ANTHROPIC_MODEL` is optional and defaults to `claude-haiku-5-5`
 5. Deploy and open the URL.

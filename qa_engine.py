@@ -372,10 +372,14 @@ def build_instructor(r: dict, idx: int) -> dict:
                          "score": sc, "start": e["start"] if e else "", "type": e["type"] if e else "Unmapped"})
     sessions.sort(key=lambda s: f"{s['date']}{s['start']}")
 
-    # Daily averages: dayN_* columns (any number of days), then daily_summary_json,
-    # then the mean of that day's session scores. Days without QA are skipped and
-    # only the last QA_DAYS days with reviews are kept.
+    # Daily averages: worked out here as the mean of that day's session scores. The
+    # export's own dayN_* columns and daily_summary_json only fill in days with no
+    # session scores. Days without QA are skipped and only the last QA_DAYS days
+    # with reviews are kept.
     by_date: dict = {}
+    for d in {s["date"] for s in sessions if s["date"]}:
+        sc = [s["score"] for s in sessions if s["date"] == d]
+        by_date[d] = {"date": d, "avg": round(_mean(sc), 2), "count": len(sc)}
     for i in range(1, 32):
         d, a = norm_date(r.get(f"day{i}_date")), num(r.get(f"day{i}_average"))
         if d and a is not None:
@@ -386,9 +390,6 @@ def build_instructor(r: dict, idx: int) -> dict:
         a = num(x.get("daily_average")) if ok(x) else None
         if d and a is not None:
             by_date.setdefault(d, {"date": d, "avg": a, "count": int(num(x.get("evaluation_count")) or 0)})
-    for d in {s["date"] for s in sessions if s["date"]}:
-        sc = [s["score"] for s in sessions if s["date"] == d]
-        by_date.setdefault(d, {"date": d, "avg": round(_mean(sc), 2), "count": len(sc)})
     days = [by_date[d] for d in sorted(by_date)][-QA_DAYS:]
     keep = {d["date"] for d in days}
     for d in days:  # session count from the export can be 0 when the average came from elsewhere
@@ -419,12 +420,11 @@ def build_instructor(r: dict, idx: int) -> dict:
 
 
 def evaluate(inst: dict, S: dict) -> dict:
+    """Flagged when each of the last three QA days has a daily average below the threshold.
+    The days are judged one by one; their overall average isn't used."""
     T = S["threshold"]
     vals = [d["avg"] for d in inst["days"] if d["avg"] is not None]
-    all3 = len(vals) >= QA_DAYS and all(v <= T for v in vals)
-    avail = len(vals) >= 2 and all(v <= T for v in vals)
-    avg3 = bool(vals) and mean(vals) <= T
-    flagged = all3 if S["rule"] == "all3" else avail if S["rule"] == "available" else avg3
+    flagged = len(vals) >= QA_DAYS and all(v < T for v in vals)
     watch = (not flagged) and len(vals) >= 2 and all(v < T + 1 for v in vals)
     return {"flagged": flagged, "watch": watch, "mean3": mean(vals)}
 
@@ -437,14 +437,8 @@ def build_plan(inst: dict, S: dict) -> dict:
     ev = evaluate(inst, S)
     dates = [d["date"] for d in inst["days"] if d["date"]]
     vals = [d["avg"] for d in inst["days"] if d["avg"] is not None]
-    rule = S["rule"]
-    if ev["flagged"] and rule == "all3":
-        reason = (f"Your daily average was {'below' if all(v < T for v in vals) else 'at or below'} {fT(T)} on each of "
-                  f"your last three days with QA reviews.")
-    elif ev["flagged"] and rule == "available":
-        reason = f"Your daily average was at or below {fT(T)} on every recent day you had evaluated sessions."
-    elif ev["flagged"]:
-        reason = f"Your average across your last three days with QA reviews was {f2(ev['mean3'])}, which is at or below {fT(T)}."
+    if ev["flagged"]:
+        reason = f"Your daily average was below {fT(T)} on each of your last three days with QA reviews."
     else:
         reason = "A few of your scores are below where we’d like them to be."
 
@@ -611,7 +605,7 @@ def baseline_email(inst: dict, S: dict) -> dict:
         L.append(f"- {P['targets'][0]} and {P['targets'][1]} should each reach at least {P['target_category_min']}.")
     elif P["targets"]:
         L.append(f"- {P['targets'][0]} should reach at least {P['target_category_min']}.")
-    tail = f" If scores are still at or below {P['threshold']}, we’ll move to a structured improvement plan with your manager." if P["plan"] else ""
+    tail = f" If scores are still below {P['threshold']}, we’ll move to a structured improvement plan with your manager." if P["plan"] else ""
     L += [f"- We’ll review progress together on {P['review']}.{tail}", "",
           f"Please let me know if anything about the {P['setup']} is getting in the way, so we can fix that from "
           f"our side too.", "",

@@ -81,8 +81,7 @@ def parse_settings(raw: dict | None) -> dict:
         except (TypeError, ValueError):
             return d
 
-    return {"threshold": fnum("threshold", 5.0), "rule": raw.get("rule") if raw.get("rule") in ("all3", "available", "avg3") else "all3",
-            "goal": fnum("goal", 6.0), "call": raw.get("call") or "", "review": raw.get("review") or "",
+    return {"threshold": fnum("threshold", 5.0), "goal": fnum("goal", 6.0), "call": raw.get("call") or "", "review": raw.get("review") or "",
             "name": (raw.get("name") or "").strip() or "[Your Name]", "plan": bool(raw.get("plan", True))}
 
 

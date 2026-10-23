@@ -81,6 +81,9 @@ input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events
 .listpanel{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);display:flex;flex-direction:column;max-height:calc(100vh - 24px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}
 @media (max-width:900px){.listpanel{position:static;max-height:none}}
 .tabs{display:flex;flex-wrap:wrap;gap:6px;padding:12px 12px 0}
+.subjects{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:12px 12px 0}
+.subjects .lbl{font-size:13px;color:var(--muted);margin-right:2px}
+.subjects .tab{padding:3px 10px;font-size:13px}
 .tab{border:1px solid var(--line);background:transparent;border-radius:999px;padding:5px 12px;font-size:14px;cursor:pointer}
 .tab[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
 .listtools{display:flex;gap:8px;padding:12px;border-bottom:1px solid var(--line)}
@@ -182,7 +185,7 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
   <header class="top">
     <div>
       <h1>QA email drafts</h1>
-      <p class="sub">Upload the instructor QA export (last 7 days). Each instructor is judged on their last 3 days with QA reviews; days without reviews are skipped. Flagged instructors get an email written by AI from their scores and the updated rubrics, with a rule-based draft as a fallback.</p>
+      <p class="sub">Upload the instructor QA export (last 7 days). An instructor is flagged when each of their last 3 days with QA reviews has a daily average below the threshold; days without reviews are skipped. Flagged instructors get an email written by AI from their scores and the updated rubrics, with a rule-based draft as a fallback.</p>
     </div>
     <div class="filebar hidden" id="filebar">
       <span id="fileName"></span>
@@ -218,8 +221,6 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
   <section id="app" class="hidden">
     <div class="settings" id="settings">
       <div class="field"><label for="sThr">Score threshold</label><input id="sThr" type="number" step="0.1" min="0" max="10" value="5"></div>
-      <div class="field"><label for="sRule">At or below threshold on</label>
-        <select id="sRule"><option value="all3">All last 3 QA days</option><option value="available">Every QA day (2 or more)</option><option value="avg3">Average of last 3 QA days</option></select></div>
       <div class="field"><label for="sGoal">Target by review date</label><input id="sGoal" type="number" step="0.1" min="0" max="10" value="6"></div>
       <div class="field"><label for="sReview">Review date</label><input id="sReview" type="date"></div>
       <div class="field wide"><label for="sCc">Always CC (emails, comma-separated)</label><input id="sCc" type="text" placeholder="riya@…, prudhvi@…"></div>
@@ -230,6 +231,7 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
     <p class="summary" id="summary"></p>
     <div class="main">
       <aside class="panel listpanel" aria-label="Instructors">
+        <div class="subjects" role="group" aria-label="Filter by subject" id="subjects"></div>
         <div class="tabs" role="group" aria-label="Filter instructors" id="tabs"></div>
         <div class="listtools">
           <input type="search" id="search" placeholder="Search name, institute or email" aria-label="Search instructors">
@@ -254,7 +256,16 @@ const tShort=dt=>{const m=String(dt||"").match(/T(\d{2}):(\d{2})/);if(!m)return"
 const fr=v=>v%1===0?v.toFixed(1):String(Number(v.toFixed(2)));
 const fT=v=>String(Number(Number(v).toFixed(2)));
 
-const state={file:null,data:null,drafts:{},tab:"flagged",q:"",sel:null,busy:{},failed:{},llm:null};
+const state={file:null,data:null,drafts:{},tab:"flagged",subj:"all",q:"",sel:null,busy:{},failed:{},llm:null};
+try{ state.subj=localStorage.getItem("qa.subj")||"all"; }catch(_){}
+// Subject filter: these four first, then any other category found in the export
+const SUBJECTS=[["TECH","Tech"],["ENGLISH","English"],["APTITUDE","Aptitude"],["MATH","Math"]];
+function subjectList(){
+  const found=new Set(state.data.instructors.map(x=>x.category||""));
+  const extra=[...found].filter(c=>!SUBJECTS.some(([k])=>k===c)).sort()
+    .map(c=>[c,c?c[0]+c.slice(1).toLowerCase():"No subject"]);
+  return [...SUBJECTS.filter(([k])=>found.has(k)),...extra];
+}
 
 const ccList=()=>$("sCc").value.split(/[,;\s]+/).map(s=>s.trim()).filter(Boolean).join(", ");
 // Capability managers from the roster export, kept in this browser until replaced
@@ -272,11 +283,11 @@ const capMgr=x=>x.capmgr||roster&&(roster.byId.get(normId(x.id))||roster.byEmail
 const ccFor=x=>{ const m=capMgr(x); const all=[...ccList().split(", "),...(m?m.cc:[])].filter(Boolean);
   const seen=new Set(); return all.filter(e=>{ const k=e.toLowerCase(); if(seen.has(k)) return false; seen.add(k); return true; }).join(", "); };
 function settings(){
-  return {threshold:parseFloat($("sThr").value)||5, rule:$("sRule").value, goal:parseFloat($("sGoal").value)||6,
+  return {threshold:parseFloat($("sThr").value)||5, goal:parseFloat($("sGoal").value)||6,
           review:$("sReview").value, name:$("sName").value.trim(), plan:$("sPlan").checked};
 }
 const skey=()=>JSON.stringify(settings());
-function scoreClass(v,T){ if(v==null) return "na"; if(v<=T) return "lo"; if(v<T+1) return "md"; return "hi"; }
+function scoreClass(v,T){ if(v==null) return "na"; if(v<T) return "lo"; if(v<T+1) return "md"; return "hi"; }
 function showErr(msg){ const e=$("err"); e.textContent=msg; e.style.display="block"; e.style.background=""; e.style.color=""; $("drop").classList.remove("hidden"); $("app").classList.add("hidden"); }
 function showInfo(msg){ const e=$("err"); e.textContent=msg; e.style.display="block"; e.style.background="var(--ok-bg)"; e.style.color="var(--ok)"; }
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2200); }
@@ -341,7 +352,7 @@ async function analyze(first){
   if(first){
     $("sReview").value=j.settings.review;
     state.drafts={}; state.busy={}; state.failed={}; state.tab="flagged";
-    const f=j.instructors.find(x=>x.flagged); state.sel=f?f.id:null;
+    const f=groups().flagged[0]; state.sel=f?f.id:null;
   }
   // refresh rule-based drafts that weren’t edited
   const k=skey();
@@ -356,7 +367,7 @@ function handleFile(file){ if(!file) return; state.file=file; analyze(true); }
 
 const inst=id=>state.data.instructors.find(x=>x.id===id);
 function groups(){
-  const all=state.data.instructors;
+  const all=state.data.instructors.filter(x=>state.subj==="all"||(x.category||"")===state.subj);
   return {flagged:all.filter(x=>x.flagged), watch:all.filter(x=>x.watch), esc:all.filter(x=>x.escalations.length), all};
 }
 
@@ -387,10 +398,17 @@ async function writeAll(){
 
 function render(){
   if(!state.data) return;
-  const S=settings(), G=groups(), T=S.threshold, D=state.data;
+  const D=state.data, subs=subjectList();
+  if(state.subj!=="all"&&!subs.some(([k])=>k===state.subj)) state.subj="all";
+  const S=settings(), G=groups(), T=S.threshold;
+  const allFlagged=D.instructors.filter(x=>x.flagged);
+  $("subjects").innerHTML=`<span class="lbl">Subject</span>`+[["all","All"],...subs].map(([k,l])=>{
+    const n=k==="all"?allFlagged.length:allFlagged.filter(x=>(x.category||"")===k).length;
+    return `<button class="tab" data-subj="${esc(k)}" aria-pressed="${state.subj===k}" title="${n} flagged">${esc(l)} (${n})</button>`; }).join("");
   const escCount=G.esc.reduce((a,x)=>a+x.escalations.length,0);
-  const ruleText={all3:`at or below ${fT(T)} on each of their last 3 QA days`,available:`at or below ${fT(T)} on every recent QA day`,avg3:`at or below ${fT(T)} on the average of their last 3 QA days`}[S.rule];
-  $("summary").innerHTML=`${D.instructors.length} instructors in this export${D.skipped?` (${D.skipped} row${D.skipped===1?"":"s"} couldn’t be read and ${D.skipped===1?"was":"were"} skipped)`:""}. <b>${G.flagged.length}</b> ${G.flagged.length===1?"is":"are"} ${ruleText}, ${G.watch.length} ${G.watch.length===1?"is":"are"} close to the line, and ${escCount} session${escCount===1?"":"s"} need${escCount===1?"s":""} an escalation check.`;
+  const ruleText=`below ${fT(T)} on each of their last 3 QA days (each day’s average checked on its own)`;
+  const subjLabel=state.subj==="all"?"":(subs.find(([k])=>k===state.subj)||[,state.subj])[1];
+  $("summary").innerHTML=`${subjLabel?`<b>${esc(subjLabel)} only:</b> ${G.all.length} of `:""}${D.instructors.length} instructors in this export${D.skipped?` (${D.skipped} row${D.skipped===1?"":"s"} couldn’t be read and ${D.skipped===1?"was":"were"} skipped)`:""}. <b>${G.flagged.length}</b> ${G.flagged.length===1?"is":"are"} ${ruleText}, ${G.watch.length} ${G.watch.length===1?"is":"are"} close to the line, and ${escCount} session${escCount===1?"":"s"} need${escCount===1?"s":""} an escalation check.`;
   const tabs=[["flagged","Flagged",G.flagged.length],["watch","Close to the line",G.watch.length],["esc","Escalation checks",G.esc.length],["all","All",G.all.length]];
   $("tabs").innerHTML=tabs.map(([k,l,c])=>`<button class="tab" data-tab="${k}" aria-pressed="${state.tab===k}">${l} (${c})</button>`).join("");
   const q=state.q.toLowerCase();
@@ -401,7 +419,7 @@ function render(){
     const d=state.drafts[x.id];
     const chip=state.busy[x.id]?`<span class="chip busy">Writing…</span>`:state.failed[x.id]?`<span class="chip fail">AI failed</span>`:(d&&d.source==="ai")?`<span class="chip ai">AI draft</span>`:"";
     return `<li><button class="item" data-id="${esc(x.id)}" aria-current="${state.sel===x.id}"><span><span class="nm">${esc(x.name)}</span><span class="mt">${esc(x.category)}${x.institute?", "+esc(x.institute):""}</span>${chip}</span><span class="strip">${cells}</span></button></li>`;
-  }).join(""):`<li class="emptylist">${state.tab==="flagged"?"No instructors meet this rule. Try a different threshold or rule above.":"No instructors in this list."}</li>`;
+  }).join(""):`<li class="emptylist">${state.tab==="flagged"?"No instructors meet this rule. Try a different threshold above.":"No instructors in this list."}</li>`;
   $("copyAll").disabled=!G.flagged.length;
   $("aiAll").disabled=!!state.writingAll||!G.flagged.length||!(state.llm&&state.llm.configured);
   renderDetail(S);
@@ -414,7 +432,7 @@ function renderDetail(S){
   const badge=x.flagged?`<span class="badge lo">Flagged</span>`:x.watch?`<span class="badge md">Close to the line</span>`:"";
   const tpos=Math.min(100,Math.max(0,T*10));
   const cols=x.days.map(dy=>{ const h=dy.avg==null?0:Math.max(2,dy.avg*10);
-    return `<div class="mcol"><span class="mval" style="color:var(--${dy.avg==null?"muted":dy.avg<=T?"low":dy.avg<T+1?"mid":"ok"})">${dy.avg==null?"–":dy.avg.toFixed(2)}</span><div class="mtrack"><div style="height:${h}%" class="mbar ${scoreClass(dy.avg,T)}"></div></div><span class="mday">${esc(dShort(dy.date))}</span></div>`; }).join("");
+    return `<div class="mcol"><span class="mval" style="color:var(--${dy.avg==null?"muted":dy.avg<T?"low":dy.avg<T+1?"mid":"ok"})">${dy.avg==null?"–":dy.avg.toFixed(2)}</span><div class="mtrack"><div style="height:${h}%" class="mbar ${scoreClass(dy.avg,T)}"></div></div><span class="mday">${esc(dShort(dy.date))}</span></div>`; }).join("");
   const marks=`<div class="marks" role="img" aria-label="Daily averages: ${x.days.map(dy=>`${dShort(dy.date)} ${dy.avg==null?"no sessions":dy.avg.toFixed(2)}`).join(", ")}; threshold ${fT(T)}">${cols}<div class="mplot"><div class="tline" style="bottom:${tpos}%"></div><span class="tlabel" style="bottom:${tpos}%">${fT(T)}</span></div></div>`;
   const sessRows=x.sessions.map(s=>`<tr><td class="num">${esc(dShort(s.date))}${s.start?", "+esc(tShort(s.start)):""}</td><td>${esc(s.title)}</td><td>${esc(s.type)}</td><td class="num"><span class="score ${scoreClass(s.score,T)}">${s.score.toFixed(2)}</span></td></tr>`).join("");
   let catRows="";
@@ -481,6 +499,10 @@ const drop=$("drop");
 ["dragenter","dragover"].forEach(t=>drop.addEventListener(t,()=>drop.classList.add("over")));
 drop.addEventListener("dragleave",()=>drop.classList.remove("over"));
 $("tabs").addEventListener("click",e=>{ const b=e.target.closest(".tab"); if(!b) return; state.tab=b.dataset.tab; render(); });
+$("subjects").addEventListener("click",e=>{ const b=e.target.closest(".tab"); if(!b) return; state.subj=b.dataset.subj;
+  try{ localStorage.setItem("qa.subj",state.subj); }catch(_){}
+  const G=groups(); if(!G.all.some(x=>x.id===state.sel)){ const f=G[state.tab][0]||G.all[0]; state.sel=f?f.id:null; }
+  render(); });
 $("list").addEventListener("click",e=>{ const b=e.target.closest(".item"); if(!b) return; state.sel=b.dataset.id; render(); if(window.matchMedia("(max-width:900px)").matches) $("detail").scrollIntoView({behavior:"smooth",block:"start"}); });
 $("search").addEventListener("input",e=>{ state.q=e.target.value; render(); });
 let tmr; $("settings").addEventListener("input",e=>{

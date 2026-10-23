@@ -32,7 +32,8 @@ Structure (keep this order and these headings):
 Hi <first name>,
 <one short paragraph: period reviewed, against the updated rubrics, why they are receiving this email>
 YOUR SCORES – each day's average with session count, then the average across all sessions. These are the
-  instructor's last three days with QA reviews (days without reviews are skipped), so don't call them consecutive.
+  instructor's last days with QA reviews, up to three (days without reviews are skipped), so don't call them
+  consecutive, and never say "three days" when DATA.daily_averages has fewer.
 WHAT'S WORKING – 1–2 sentences, specific (best sessions, strong categories, conduct).
 KEY INSIGHTS – group by session type ("Lecture-format sessions", "Practice sessions", ...). Number the weak categories
   in order of impact (at most 3). For each: average, range, weight, then 1 sentence explaining in plain words what the

@@ -1,8 +1,10 @@
 # QA email drafts
 
-Upload the instructor QA export (last 7 days). Each instructor is judged on their
-last 3 days with QA reviews; days without reviews are skipped. The app flags
-instructors whose daily average is at or below the threshold, shows their scores and rubric categories
+Upload the instructor QA export (last 7 or 30 days). Each day's average is worked
+out from that day's session scores, and days without reviews are skipped. The app
+flags instructors whose daily average is below the threshold (default 5) on each of
+their last 3 days with QA reviews (each day is checked on its own, not the overall
+average). Instructors with fewer than 3 QA days aren't flagged. It shows their scores and rubric categories
 (lecture and practice sessions), and writes each instructor's email with an LLM
 using their scores and the updated rubric workbook. If the AI isn't set up or
 fails, a rule-based draft is always available.

@@ -26,7 +26,7 @@ fails, a rule-based draft is always available.
    - `ANTHROPIC_API_KEY` – required for AI emails
    - `ANTHROPIC_MODEL` – optional, defaults to `claude-haiku-5-5` (fast); set `claude-sonnet-5-5` for more polished writing
    - `APP_PASSWORD` – optional but recommended; the browser will ask for it (any username)
-   - To use OpenAI instead: `LLM_PROVIDER=openai`, `OPENAI_API_KEY`, `OPENAI_MODEL`
+   - To use OpenAI instead: `LLM_PROVIDER=openai` and `OPENAI_API_KEY`; `OPENAI_MODEL` is optional and defaults to `gpt-4o-mini`
 5. Deploy and open the URL.
 
 ## Run locally

@@ -122,21 +122,22 @@ def _parse(text: str) -> dict:
 def provider_info() -> dict:
     p = os.getenv("LLM_PROVIDER", "anthropic").lower()
     if p == "openai":
-        return {"provider": "openai", "model": os.getenv("OPENAI_MODEL", ""),
-                "configured": bool(os.getenv("OPENAI_API_KEY") and os.getenv("OPENAI_MODEL"))}
-    return {"provider": "anthropic", "model": os.getenv("ANTHROPIC_MODEL", "claude-haiku-5-5"),
+        return {"provider": "openai", "model": os.getenv("OPENAI_MODEL") or "gpt-4o-mini",
+                "configured": bool(os.getenv("OPENAI_API_KEY"))}
+    return {"provider": "anthropic", "model": os.getenv("ANTHROPIC_MODEL") or "claude-haiku-5-5",
             "configured": bool(os.getenv("ANTHROPIC_API_KEY"))}
 
 
 def _call(user: str) -> str:
     info = provider_info()
     if not info["configured"]:
-        raise RuntimeError("AI isn’t set up. Add ANTHROPIC_API_KEY (or OPENAI_API_KEY and OPENAI_MODEL with "
-                           "LLM_PROVIDER=openai) in the server’s environment variables.")
+        raise RuntimeError("AI isn’t set up. Add ANTHROPIC_API_KEY (or OPENAI_API_KEY with LLM_PROVIDER=openai) "
+                           "in the server’s environment variables.")
     if info["provider"] == "openai":
         from openai import OpenAI
         client = OpenAI(timeout=120)
-        r = client.chat.completions.create(model=info["model"], messages=[
+        r = client.chat.completions.create(model=info["model"], max_tokens=4000,
+                                           response_format={"type": "json_object"}, messages=[
             {"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user}])
         return r.choices[0].message.content or ""
     from anthropic import Anthropic

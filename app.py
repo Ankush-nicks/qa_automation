@@ -97,7 +97,7 @@ def parse_settings(raw: dict | None) -> dict:
             return d
 
     return {"threshold": fnum("threshold", 5.0), "goal": fnum("goal", 6.0), "call": raw.get("call") or "", "review": raw.get("review") or "",
-            "name": (raw.get("name") or "").strip() or "[Your Name]", "plan": bool(raw.get("plan", True))}
+            "name": (raw.get("name") or "").strip() or "Central QA Team", "plan": bool(raw.get("plan", True))}
 
 
 @app.get("/")

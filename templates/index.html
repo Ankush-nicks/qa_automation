@@ -137,6 +137,7 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
 
 /* Letter */
 .letterhead{display:grid;grid-template-columns:70px 1fr;gap:8px 10px;align-items:center;margin-bottom:10px}
+.letter.preview{min-height:520px;max-height:760px;overflow:auto;background:#FFFFFF;color:#1a1a1a}
 .letterhead label{font-size:13px;font-weight:600;color:var(--muted)}
 .letterhead input{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--paper)}
 .letter{width:100%;min-height:520px;resize:vertical;border:1px solid var(--line);border-radius:10px;background:var(--letter);padding:20px 22px;font:16px/1.65 "Source Serif 4",Georgia,"Times New Roman",serif}
@@ -225,7 +226,7 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
       <div class="field"><label for="sGoal">Target by review date</label><input id="sGoal" type="number" step="0.1" min="0" max="10" value="6"></div>
       <div class="field"><label for="sReview">Review date</label><input id="sReview" type="date"></div>
       <div class="field wide"><label for="sCc">Always CC (emails, comma-separated)</label><input id="sCc" type="text" placeholder="prudhvi@…"></div>
-      <div class="field"><label for="sName">Sign off as</label><input id="sName" type="text" value="[Your Name]"></div>
+      <div class="field"><label for="sName">Sign off as</label><input id="sName" type="text" value="Central QA Team"></div>
       <div class="field check"><input id="sPlan" type="checkbox" checked><label for="sPlan">Mention improvement plan</label></div>
     </div>
     <div class="busyline hidden" id="refreshing" role="status"><span class="spin" aria-hidden="true"></span>Updating with the new settings…</div>
@@ -452,7 +453,7 @@ function renderDetail(S){
   const canAI=state.llm&&state.llm.configured;
   const src=ai?`AI draft (${esc(d.model||"")})${d.edited?", edited":""}${stale?". Settings have changed since this was written; rewrite to update it.":""}`:`Rule-based draft${d&&d.edited?", edited":""}`;
   const warns=[...(d&&d.warnings||[])].concat(state.failed[x.id]?[state.failed[x.id]]:[]);
-  const mailto=d?`mailto:${encodeURIComponent(x.email)}?cc=${encodeURIComponent(ccFor(x))}&subject=${encodeURIComponent(d.subject)}&body=${encodeURIComponent(d.body)}`:"#";
+  const mailto=d?mailtoFor(x,d):"#";
   $("detail").innerHTML=`<div class="detail">
     <div class="dhead"><div>
       <h2>${esc(x.name)}${badge}</h2>
@@ -476,26 +477,65 @@ function renderDetail(S){
       <label for="eCc">CC</label><input id="eCc" value="${esc(ccFor(x))}" readonly title="Always CC plus the instructor’s capability manager">
       <label for="eSub">Subject</label><input id="eSub" value="${esc(d?d.subject:"")}">
     </div>
-    <textarea class="letter" id="eBody" spellcheck="true" aria-label="Email body">${esc(d?d.body:"")}</textarea>
+    ${state.preview
+      ? `<div class="letter preview" id="ePreview" aria-label="Email preview">${mdToHtml(d?d.body:"")}</div>`
+      : `<textarea class="letter" id="eBody" spellcheck="true" aria-label="Email body">${esc(d?d.body:"")}</textarea>`}
     <div class="actions">
       <button class="btn" id="bAI" ${busy||!canAI?"disabled":""} title="${canAI?"":"AI isn’t set up on the server"}">${ai?"Rewrite with AI":"Write with AI"}</button>
-      <button class="btn ghost" id="bCopy">Copy email</button>
+      <button class="btn ghost" id="bPreview" aria-pressed="${!!state.preview}">${state.preview?"Edit":"Preview"}</button>
+      <button class="btn ghost" id="bCopy" title="Copies the formatted email (headings and bold) to paste into Gmail or Outlook">Copy email</button>
       <a class="btn ghost" id="bMail" href="${mailto}" target="_blank" rel="noopener">Open in mail app</a>
       <button class="btn ghost" id="bRule" ${(!ai&&!(d&&d.edited))?"disabled":""}>Use rule-based draft</button>
     </div>
   </div>`;
-  const mark=()=>{ const dr=state.drafts[x.id]; dr.subject=$("eSub").value; dr.body=$("eBody").value; dr.edited=true;
-    $("bMail").href=`mailto:${encodeURIComponent(x.email)}?cc=${encodeURIComponent(ccFor(x))}&subject=${encodeURIComponent(dr.subject)}&body=${encodeURIComponent(dr.body)}`; };
-  $("eSub").addEventListener("input",mark); $("eBody").addEventListener("input",mark);
+  const mark=()=>{ const dr=state.drafts[x.id]; dr.subject=$("eSub").value; if($("eBody")) dr.body=$("eBody").value; dr.edited=true;
+    $("bMail").href=mailtoFor(x,dr); };
+  $("eSub").addEventListener("input",mark); if($("eBody")) $("eBody").addEventListener("input",mark);
   $("bAI").onclick=()=>writeAI(x.id);
-  $("bCopy").onclick=()=>{ const dr=state.drafts[x.id]; copyText(`To: ${x.email}\nCC: ${ccFor(x)}\nSubject: ${dr.subject}\n\n${dr.body}`,"Email copied"); };
+  $("bPreview").onclick=()=>{ state.preview=!state.preview; render(); };
+  $("bCopy").onclick=()=>{ const dr=state.drafts[x.id];
+    copyText(`${headerText(x,dr)}\n\n${mdToPlain(dr.body)}`,"Email copied",headerHtml(x,dr)+mdToHtml(dr.body)); };
   $("bRule").onclick=()=>{ state.drafts[x.id]={source:"rule",subject:x.baseline.subject,body:x.baseline.body,edited:false,warnings:[],skey:skey()}; render(); };
 }
 
-function copyText(text,msg){
+// The email body uses light Markdown: "### " headings, "**bold**", "- " bullets, "1. " lists.
+// It is copied as formatted text (HTML) so headings and bold survive pasting into Gmail/Outlook.
+const mdInline=s=>esc(s).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>");
+function mdToHtml(md){
+  const out=[]; let list=null, para=[];
+  const flushP=()=>{ if(para.length){ out.push(`<p style="margin:0 0 10px">${para.join("<br>")}</p>`); para=[]; } };
+  const closeL=()=>{ if(list){ out.push(`</${list}>`); list=null; } };
+  String(md||"").split("\n").forEach(raw=>{
+    const line=raw.replace(/\s+$/,""); let m;
+    if(!line.trim()){ flushP(); closeL(); return; }
+    if((m=line.match(/^#{1,6}\s+(.*)/))){ flushP(); closeL(); out.push(`<h3 style="margin:18px 0 8px;font-size:16px">${mdInline(m[1])}</h3>`); return; }
+    if((m=line.match(/^\s*[-•]\s+(.*)/))){ flushP(); if(list!=="ul"){ closeL(); out.push(`<ul style="margin:0 0 10px;padding-left:24px">`); list="ul"; } out.push(`<li style="margin:2px 0">${mdInline(m[1])}</li>`); return; }
+    if((m=line.match(/^\s*(\d+)\.\s+(.*)/))){ flushP(); if(list!=="ol"){ closeL(); out.push(`<ol start="${m[1]}" style="margin:0 0 10px;padding-left:24px">`); list="ol"; } out.push(`<li style="margin:2px 0">${mdInline(m[2])}</li>`); return; }
+    closeL(); para.push(mdInline(line));
+  });
+  flushP(); closeL();
+  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1a1a1a">${out.join("")}</div>`;
+}
+const mdToPlain=md=>String(md||"").split("\n").map(l=>l.replace(/^#{1,6}\s+/,"").replace(/\*\*(.+?)\*\*/g,"$1")).join("\n");
+const headerText=(x,d)=>`To: ${x.email}\nCC: ${ccFor(x)}\nSubject: ${d.subject}`;
+const headerHtml=(x,d)=>`<p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#555;margin:0 0 12px">To: ${esc(x.email)}<br>CC: ${esc(ccFor(x))}<br>Subject: ${esc(d.subject)}</p>`;
+const mailtoFor=(x,d)=>`mailto:${encodeURIComponent(x.email)}?cc=${encodeURIComponent(ccFor(x))}&subject=${encodeURIComponent(d.subject)}&body=${encodeURIComponent(mdToPlain(d.body))}`;
+
+function copyText(text,msg,html){
   const done=()=>toast(msg);
-  const fallback=()=>{ const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); try{ document.execCommand("copy"); done(); }catch(e){ toast("Copy failed. Select the text and copy it manually."); } ta.remove(); };
-  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done).catch(fallback); } else fallback();
+  const fallback=()=>{
+    let el;
+    if(html){ el=document.createElement("div"); el.innerHTML=html; el.contentEditable="true"; }
+    else { el=document.createElement("textarea"); el.value=text; }
+    el.style.position="fixed"; el.style.left="-9999px"; document.body.appendChild(el);
+    if(html){ const r=document.createRange(); r.selectNodeContents(el); const s=getSelection(); s.removeAllRanges(); s.addRange(r); } else el.select();
+    try{ document.execCommand("copy"); done(); }catch(e){ toast("Copy failed. Select the text and copy it manually."); }
+    el.remove();
+  };
+  if(html&&navigator.clipboard&&navigator.clipboard.write&&window.ClipboardItem){
+    navigator.clipboard.write([new ClipboardItem({"text/html":new Blob([html],{type:"text/html"}),"text/plain":new Blob([text],{type:"text/plain"})})]).then(done).catch(fallback);
+  } else if(!html&&navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done).catch(fallback); }
+  else fallback();
 }
 
 /* Events */
@@ -518,8 +558,10 @@ let tmr; $("settings").addEventListener("input",e=>{
   clearTimeout(tmr); tmr=setTimeout(()=>analyze(false),450); });
 $("aiAll").addEventListener("click",writeAll);
 $("copyAll").addEventListener("click",()=>{
-  const text=groups().flagged.map(x=>{ const d=state.drafts[x.id]; return `To: ${x.email}\nCC: ${ccFor(x)}\nSubject: ${d.subject}\n\n${d.body}`; }).join("\n\n---------------------------------------------\n\n");
-  copyText(text,`${groups().flagged.length} emails copied`);
+  const F=groups().flagged;
+  const text=F.map(x=>{ const d=state.drafts[x.id]; return `${headerText(x,d)}\n\n${mdToPlain(d.body)}`; }).join("\n\n---------------------------------------------\n\n");
+  const html=F.map(x=>{ const d=state.drafts[x.id]; return headerHtml(x,d)+mdToHtml(d.body); }).join(`<hr style="margin:24px 0">`);
+  copyText(text,`${F.length} emails copied`,html);
 });
 $("rubricInput").addEventListener("change",async ev=>{
   const f=ev.target.files[0]; ev.target.value=""; if(!f) return;

@@ -550,66 +550,301 @@ def build_plan(inst: dict, S: dict) -> dict:
         "actions": acts, "recordings": recs, "targets": tops,
         "threshold": fT(T), "goal": fT(S["goal"]), "target_category_min": fT(max(T, 5)),
         "call": d_long(S["call"]), "call_day": wday(S["call"]), "review": d_long(S["review"]),
-        "plan": S["plan"], "sender": S.get("name") or "[Your Name]",
+        "plan": S["plan"], "sender": S.get("name") or "Central QA Team",
         "setup": "practical setup (lab access, batch size or materials)" if inst["cat"].get("Practice")
         else "session setup (slides, batch or schedule)",
     }
 
 
+# --------------------------------------------------------------------------
+# Email playbook: per category, the wording used in the email
+#   area  – one line for "Key Areas for Improvement"
+#   title – the action-plan heading;  plan – its bullet points
+#   focus – a short phrase used in sentences ("strengthen practice facilitation")
+#   strength / strength_text – used in "What's Working Well"
+# --------------------------------------------------------------------------
+def _pb():
+    same = lambda v: (lambda c: v)  # noqa: E731
+    tech = lambda a, b: (lambda c: a if is_tech_like(c) else b)  # noqa: E731
+    return {
+        "curriculum alignment and content accuracy": dict(
+            focus="curriculum coverage", strength="Content accuracy",
+            strength_text="demonstrating a strong foundation in subject knowledge and curriculum delivery",
+            area=same("Cover every core topic in the session plan, in sequence, with relevant examples and minimal off-topic discussion."),
+            title="Cover the session plan fully",
+            plan=same(["Before each session, list the core topics or tasks from the session plan, with a time allocation for each.",
+                       "Cover every core topic in the planned order, and check the plan again before closing the session.",
+                       "Use at least one relevant example for every concept taught.",
+                       "Keep off-topic discussion short and bring the class back to the plan."])),
+        "pedagogical quality": dict(
+            focus="explanation clarity", strength="Clear explanations",
+            strength_text="showing clear and well-paced explanations",
+            area=tech("Focus on clearer explanations, appropriate pacing, step-by-step demonstrations and reducing filler words.",
+                      "Focus on clearer explanations, appropriate pacing and regular checks for understanding."),
+            title="Strengthen explanation and delivery",
+            plan=tech(["Break complex concepts into smaller, easy-to-follow steps.",
+                       "Adjust pacing when explaining difficult topics and allow students sufficient time to follow along.",
+                       "Reduce filler words such as “so” and “basically” to improve clarity.",
+                       "Close each session with a two-minute recap of key concepts and takeaways."],
+                      ["Open with the agenda and break each concept into smaller, easy-to-follow steps.",
+                       "Adjust pacing on harder topics and allow students sufficient time to follow along.",
+                       "After each concept, add a quick check such as a poll, a quiz question or a short problem.",
+                       "Close each session with a two-minute recap of key concepts and takeaways."])),
+        "language": dict(
+            focus="clear language", strength="Language",
+            strength_text="reflecting clear and accessible communication",
+            area=tech("Deliver explanations in English, anchor them clearly to what is on screen and keep a patient tone while handling doubts.",
+                      "Use shorter sentences, accurate grammar and fewer filler words, with a short definition for every new term."),
+            title="Sharpen language and communication",
+            plan=tech(["Deliver all explanations and doubt resolution in English; a quick translation of a single term is fine.",
+                       "Anchor explanations to the screen with specific references, such as “look at line 14”.",
+                       "Keep a patient, encouraging tone when responding to doubts."],
+                      ["Keep sentences short (around 15 words) and grammar accurate.",
+                       "Reduce filler words and pause instead.",
+                       "Give a short definition for every new term introduced."])),
+        "student engagement": dict(
+            focus="student engagement", strength="Student engagement",
+            strength_text="showing active involvement of students in the session",
+            area=tech("Encourage active participation through regular comprehension checks, problem-solving questions and opportunities for students to explain their understanding.",
+                      "Encourage active participation through open questions, more student talk time and acknowledgement of student responses."),
+            title="Improve student engagement",
+            plan=tech(["Ask students to predict outputs, attempt problems or explain steps in their own words.",
+                       "Use student responses to identify gaps in understanding and revisit concepts where needed.",
+                       "Engage students across the classroom rather than focusing only on the front rows."],
+                      ["Ask at least 6–7 open questions every 15 minutes instead of “okay?” or “got it?”.",
+                       "Wait about three seconds for answers, then acknowledge or build on each response.",
+                       "Engage students across the classroom rather than focusing only on the front rows."])),
+        "doubt resolution and practice session facilitation": dict(
+            focus="practice facilitation", strength="Practice facilitation",
+            strength_text="showing effective support for students during practice",
+            area=same("Introduce structured guidance, regular doubt checks and proactive support to help students overcome blockers during practice sessions."),
+            title="Structure practice sessions effectively",
+            plan=same(["Begin each session with a clear agenda covering the task, available time and how students can seek help.",
+                       "Conduct regular doubt checks and proactively identify students who may be struggling.",
+                       "Address common blockers with the entire class where appropriate.",
+                       "Keep discussions focused on the learning objectives and assigned practice tasks."])),
+        "invigilation and environment control": dict(
+            focus="exam invigilation", strength="Invigilation",
+            strength_text="showing a well-run exam environment",
+            area=same("Cover the start announcement, time reminders and submission instructions in every exam, and support students with technical issues."),
+            title="Follow the invigilation routine",
+            plan=same(["Make a start announcement covering the duration, the rules and how to submit.",
+                       "Give time reminders at the halfway point and 10 minutes before the end.",
+                       "Share clear submission instructions before the exam closes.",
+                       "Help with technical issues promptly, without giving content help."])),
+        "process adherence": dict(
+            focus="process adherence", strength="Process adherence",
+            strength_text="showing a well-structured practical flow",
+            area=same("Follow the expected practical flow: an opening brief, clear instructions, time checks and a wrap-up."),
+            title="Follow a fixed practical structure",
+            plan=same(["Open with a 3–5 minute brief covering the objective, the task, the time available and how to submit.",
+                       "Give time checks at the halfway point and 5 minutes before the end.",
+                       "Close with a 5-minute wrap-up of common errors and the answers."])),
+        "clarity and communication": dict(
+            focus="clear instructions", strength="Clarity and communication",
+            strength_text="showing clear instructions and explanations",
+            area=same("Give instructions and explanations in short, simple steps and confirm that students have understood them."),
+            title="Make instructions clearer",
+            plan=same(["Give instructions in short, simple steps.",
+                       "Confirm understanding by asking a student to repeat a step, for example “What are we doing in step 2?”.",
+                       "Keep the key steps on screen so students can refer back to them."])),
+        "pedagogical support and guidance": dict(
+            focus="guidance during tasks", strength="Guidance during tasks",
+            strength_text="showing helpful support for students while they work",
+            area=same("Guide students while they work, offering hints and feedback when they are stuck."),
+            title="Guide students during tasks",
+            plan=same(["Check in with every student or group at least once during working time, starting with those who haven’t begun.",
+                       "When a student is stuck, give a hint or a guiding question before giving the answer.",
+                       "Check that the student can then complete the next step on their own."])),
+        "student engagement and independence": dict(
+            focus="student independence", strength="Student independence",
+            strength_text="showing students working confidently on their own",
+            area=same("Encourage students to attempt tasks on their own first, then share and compare answers."),
+            title="Build student independence",
+            plan=same(["Ask students to attempt each task on their own before explaining it.",
+                       "Have students share and compare answers, then address the gaps.",
+                       "Reduce prompts gradually as students become more confident."])),
+        "revision session quality": dict(
+            focus="revision quality", strength="Revision sessions",
+            strength_text="showing well-targeted revision",
+            area=same("Plan revision around the topics students found hardest and check recall with quick questions."),
+            title="Make revision sessions targeted",
+            plan=same(["Plan revision around the topics students found hardest.",
+                       "Use quick questions to check recall of each key point.",
+                       "Close with a short summary of what to practise next."])),
+    }
+
+
+PB = _pb()
+
+
+def pb(key: str) -> dict:
+    if key in PB:
+        return PB[key]
+    label = kb(key)["label"]
+    return dict(focus=label.lower(), strength=label, strength_text="a solid base to build on",
+                area=lambda c: f"Bring {label} up to the expected band.", title=f"Improve {label}",
+                plan=lambda c: [])
+
+
+NUM_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
+
+
+def nword(n: int) -> str:
+    return NUM_WORDS[n] if 0 <= n < len(NUM_WORDS) else str(n)
+
+
+def d_full(s):
+    """'7 October'"""
+    d = pd_date(s)
+    return f"{d.day} {MONTHS_L[d.month - 1]}" if d else (s or "")
+
+
+def d_full_wd(s):
+    """'Friday, 30 October'"""
+    d = pd_date(s)
+    return f"{WD[d.weekday()]}, {d.day} {MONTHS_L[d.month - 1]}" if d else (s or "")
+
+
+def _plural(n: int, word: str) -> str:
+    return word if n == 1 else word + "s"
+
+
 def baseline_email(inst: dict, S: dict) -> dict:
+    """The rule-based email, in the Central QA Team format. Light Markdown:
+    '### ' headings, '**bold**', '- ' bullets and '1. ' numbered lists."""
     P = build_plan(inst, S)
+    cat = inst["category"]
+    days = [d for d in inst["days"] if d["date"]]
+    sessions = inst["sessions"]
+    weak = sorted(P["weak"], key=lambda x: -x["impact"])[:3]
+    vals = [d["avg"] for d in days if d["avg"] is not None]
+    improved = len(vals) >= 2 and vals[-1] > vals[-2]
+
+    # What's working well
+    good = []
+    strong = sorted(((t, k, s) for t in TYPE_ORDER for k, s in (inst["cat"].get(t) or {}).items()
+                     if k != CONDUCT and s["mean"] >= 6), key=lambda x: -x[2]["mean"])
+    for t, k, s in strong[:2]:
+        p = pb(k)
+        good.append(f"**{p['strength']}:** {t} sessions averaged {f1(s['mean'])} in {kb(k)['label']}, {p['strength_text']}.")
+    best = sorted([s for s in sessions if s["score"] >= 5.5], key=lambda s: -s["score"])[:2]
+    if len(best) == 2:
+        same_type = best[0]["type"] == best[1]["type"] and best[0]["type"] in TYPE_ORDER
+        label = f"Strong {best[0]['type'].lower()} sessions" if same_type else "Strongest sessions"
+        if best[0]["title"] == best[1]["title"] and best[0]["date"] == best[1]["date"]:
+            txt = (f"The {best[0]['title']} sessions on {d_full(best[0]['date'])} scored "
+                   f"{f2(best[0]['score'])} and {f2(best[1]['score'])}")
+        else:
+            txt = (f"{best[0]['title']} ({d_full(best[0]['date'])}, {f2(best[0]['score'])}) and "
+                   f"{best[1]['title']} ({d_full(best[1]['date'])}, {f2(best[1]['score'])}) were the strongest sessions")
+        good.append(f"**{label}:** {txt}, providing positive examples to build upon.")
+    elif best:
+        good.append(f"**Strongest session:** {best[0]['title']} on {d_full(best[0]['date'])} scored "
+                    f"{f2(best[0]['score'])}, providing a positive example to build upon.")
+    if improved:
+        good.append(f"**Progress and potential:** The improvement observed on {d_full(days[-1]['date'])} shows an "
+                    "opportunity to strengthen overall performance through more structured delivery and active "
+                    "student engagement.")
+    c_all = [e["scores"][CONDUCT] for e in inst["evid"] if e["scores"].get(CONDUCT) is not None]
+    if c_all and min(c_all) >= 9:
+        good.append("**Professional conduct:** Professional Conduct scored "
+                    + (f"{fr(c_all[0])} in the session." if len(c_all) == 1
+                       else f"{fr(min(c_all))}–{fr(max(c_all))} in every session."))
+
     L = [f"Hi {P['first_name']},", "",
-         f"I’ve gone through your QA reports for {P['period']} against the updated rubrics. {P['reason']} "
-         "Below is what the reports show and the plan I’d like us to agree on for next week.", "", "YOUR SCORES"]
-    for d in P["days"]:
-        L.append(f"- {d['date']}: no evaluated sessions" if d["avg"] is None
-                 else f"- {d['date']}: {d['avg']} ({d['sessions']} session{'' if d['sessions'] == 1 else 's'})")
-    if P["overall"] and P["session_count"] > 1:
-        L.append(f"- Average across all {P['session_count']} sessions: {P['overall']}")
+         f"The QA reports for {P['period']} have been reviewed against the updated rubrics. "
+         + ("The review highlights several strengths to build on, along with a few areas where focused improvements "
+            if good else "The review highlights a few areas where focused improvements ")
+         + "can help strengthen classroom delivery and the student learning experience.", ""]
+
+    # Performance overview
+    L += ["### Performance Overview", ""]
+    for d in days:
+        L.append(f"- **{d_full(d['date'])}:** no evaluated sessions" if d["avg"] is None else
+                 f"- **{d_full(d['date'])}:** {f2(d['avg'])} ({d['count']} {_plural(d['count'], 'session')})")
+    if len(sessions) > 1:
+        L.append(f"- **Overall average:** {P['overall']} across {len(sessions)} sessions")
+    if len(vals) >= 2:
+        scored = [d for d in days if d["avg"] is not None]
+        last, hi = scored[-1], max(scored, key=lambda d: d["avg"])
+        if improved:
+            L += ["", f"The improvement on {d_full(last['date'])}, with a daily average of {f2(last['avg'])}, is "
+                      "encouraging. The focus now is to build on this progress and achieve greater consistency "
+                      "across sessions."]
+        elif hi is not last:
+            L += ["", f"{d_full(hi['date'])} was the strongest day, with a daily average of {f2(hi['avg'])}. The focus "
+                      "now is to bring every day up to that level and achieve greater consistency across sessions."]
     L.append("")
-    if P["working"]:
-        L += ["WHAT’S WORKING", " ".join(P["working"]), ""]
-    L.append("KEY INSIGHTS")
-    n = 1
-    for t in TYPE_ORDER:
-        items = sorted([x for x in P["weak"] if x["type"] == t], key=lambda x: -x["impact"])
-        if not items:
-            continue
-        L.append(TYPE_HEAD[t])
-        for x in items:
-            line = f"{n}. {x['label']}: average {f1(x['mean'])}"
-            n += 1
-            if x["n"] > 1:
-                line += f", range {fr(x['min'])}–{fr(x['max'])}"
-            if x["weight"]:
-                line += f" ({round(x['weight'] * 100)}% weight)"
-            line += f". {x['insight']}"
-            if x["n"] >= 3 and x["very_low"] >= 2:
-                line += f" {x['very_low']} of {x['n']} sessions scored 1.0 or below."
-            if x is P["top"]:
-                line += " This is the biggest drag on your overall score."
-            L.append(line)
+
+    if good:
+        L += ["### What’s Working Well", ""] + [f"- {g}" for g in good] + [""]
+
+    # Key areas
+    conduct = inst["conduct_low"]
+    L += ["### Key Areas for Improvement", ""]
+    if weak:
+        L += [f"The reports highlight {nword(len(weak))} priority {_plural(len(weak), 'area')}:", ""]
+        L += [f"{i}. **{x['label']}:** {pb(x['key'])['area'](cat)}" for i, x in enumerate(weak, 1)]
         L.append("")
-    if P["trend"]:
-        L += [P["trend"], ""]
-    if P["conduct"]:
-        items = [f"{c['title']} ({c['date']}{', ' + c['time'] if c['time'] else ''}) received a Professional Conduct score of {c['score']}"
-                 for c in P["conduct"]]
-        L += [f"One more point: {join_and(items)}, which is well below the expected level. I’d like us to review "
-              f"{'those recordings' if len(items) > 1 else 'that recording'} together so we understand what happened.", ""]
-    L.append("ACTION ITEMS")
-    L += [f"{i}. {a}" for i, a in enumerate(P["actions"], 1)]
-    L += ["", "EXPECTED OUTCOME AND NEXT STEPS",
-          f"- Target: a daily average above {P['threshold']} every day next week, reaching {P['goal']}+ by {P['review']}."]
-    if len(P["targets"]) == 2:
-        L.append(f"- {P['targets'][0]} and {P['targets'][1]} should each reach at least {P['target_category_min']}.")
-    elif P["targets"]:
-        L.append(f"- {P['targets'][0]} should reach at least {P['target_category_min']}.")
-    tail = f" If scores are still below {P['threshold']}, we’ll move to a structured improvement plan with your manager." if P["plan"] else ""
-    L += [f"- We’ll review progress together on {P['review']}.{tail}", "",
-          f"Please let me know if anything about the {P['setup']} is getting in the way, so we can fix that from "
-          f"our side too.", "",
-          "Regards,", P["sender"]]
+    conduct_scores = sorted({fr(e["scores"][CONDUCT]) for e in conduct}, key=float)
+    if conduct:
+        n = len(conduct)
+        kind = (f"{conduct[0]['type'].lower()} " if len({e["type"] for e in conduct}) == 1
+                and conduct[0]["type"] in TYPE_ORDER else "")
+        dates = join_and([d_full(d) for d in sorted({e["date"] for e in conduct if e["date"]})])
+        what = (f"{'a ' if n == 1 else ''}Professional Conduct {_plural(n, 'score')} of {conduct_scores[0]}"
+                if len(conduct_scores) == 1 else f"low Professional Conduct scores ({join_and(conduct_scores)})")
+        L += [f"{'Additionally, ' + nword(n) if n > 1 else 'Additionally, one'} {kind}{_plural(n, 'session')} on "
+              f"{dates} received {what}. The {_plural(n, 'recording')} will be reviewed to understand the context "
+              "and determine the appropriate next steps.", ""]
+
+    # Action plan
+    L += ["### Action Plan for Next Week", ""]
+    n = 0
+    for x in weak:
+        p = pb(x["key"])
+        bullets = p["plan"](cat)
+        if bullets:
+            n += 1
+            L += [f"**{n}. {p['title']}**"] + [f"- {b}" for b in bullets] + [""]
+    subj = {"TECH": "Tech", "ENGLISH": "English", "MATH": "Math", "APTITUDE": "Aptitude"}.get(cat, "")
+    foci = [pb(x["key"])["focus"] for x in weak]
+    n += 1
+    L += [f"**{n}. Learn from effective practices**",
+          f"- Observe one session conducted by a high-performing {subj + ' ' if subj else ''}trainer this week.",
+          "- Identify and apply two or three effective techniques"
+          + (f", particularly around {join_and(foci)}." if foci else "."), ""]
+    n += 1
+    L.append(f"**{n}. Review feedback and track progress**")
+    if conduct:
+        k = len(conduct)
+        L.append(f"- Review the {_plural(k, 'recording')} of the {nword(k)} {_plural(k, 'session')} with "
+                 f"Professional Conduct {_plural(k, 'score')} of {join_and(conduct_scores)} to understand the "
+                 "circumstances and identify the necessary next steps.")
+    L += ["- Refer to daily QA feedback to track progress and make timely adjustments.", ""]
+
+    # Outcomes
+    review = d_full_wd(S["review"])
+    L += ["### Expected Outcomes and Follow-Up", "",
+          "The focus for next week is to improve consistency"
+          + (f", strengthen {join_and(foci[:2])}" if foci else "")
+          + " and create a more engaging learning experience.", "",
+          f"- **Daily QA score:** Above {P['threshold']} each day next week, progressing towards {P['goal']}+ by {review}."]
+    tops = P["targets"]
+    if tops:
+        L.append(f"- **Priority parameters:** Achieve a score of at least {P['target_category_min']} in "
+                 + (f"both {tops[0]} and {tops[1]}." if len(tops) == 2 else f"{tops[0]}."))
+    L += [f"- **Progress review:** Progress against these targets will be reviewed on {review}, to assess "
+          "improvement and determine the next steps.", ""]
+    if P["plan"]:
+        L += [f"If scores remain below {P['threshold']}, a structured improvement plan will be initiated in "
+              "coordination with the reporting manager, with clear milestones and follow-up.", ""]
+    base = pb(strong[0][1])["strength"].lower() if strong else None
+    L += [(f"With a strong foundation in {base} and focused attention" if base else "With focused attention")
+          + " on the action items above, there is a clear opportunity to improve session effectiveness and achieve "
+            "more consistent QA outcomes.", "",
+          "Regards,", f"**{P['sender']}**"]
     return {"subject": P["subject"], "body": "\n".join(L)}
 
 

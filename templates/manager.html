@@ -485,12 +485,13 @@ function vMonth(el) {
     r.days.map(x => `<td class="num" title="${day(x.date)}: ${x.done} done of ${x.n}${x.rate == null ? "" : ` (${x.rate}% of settled)`}; ${x.waiting} bottom-quarter not connected">${x.n ? x.done : '<span class="dim">·</span>'}</td>`).join("") +
     `<td class="num">${r.days.length ? r.days[r.days.length - 1].waiting : 0}</td></tr>`);
   const srows = M.subjects.filter((s, i) => showAllSubj || i < 25).map(s => `<tr><td>${esc(s.subject)}</td><td>${s.type}</td><td class="num">${n2(s.avg)}</td><td class="num">${n2(s.prev)}</td><td class="num">${s.n.toLocaleString()}</td><td class="num">${s.prev_n.toLocaleString()}</td><td class="num">${s.campuses}</td></tr>`);
+  const lastCov = [...M.network].reverse().find(r => r.sessions >= 50);
   el.innerHTML = `<div class="panel"><h2 class="sec">Month view — ${day(M.from)} to ${day(M.to)}</h2>
     <h3>Average QA score per day, all campuses</h3>
     <p class="note">Each point is the average of every QA evaluation that day, out of 10, with lectures and practice drawn separately. Gaps are days without sessions (Sundays). Hollow points had fewer than 50 evaluations, so a handful of reviews decide them; they aren't joined to the line.</p>
     <div class="legend"><span><i style="background:var(--s1)"></i>Lecture</span><span><i style="background:var(--s2)"></i>Practice</span></div><div class="chart" id="cAvg"></div>
-    <h3>Share of sessions with a QA report, per day</h3>
-    <p class="note">Lecture and practice sessions with a completed QA report ÷ sessions scheduled that day. Hollow points had fewer than 50 sessions.</p><div class="chart" id="cCov"></div>${dlBtn(null, "network_daily", "net")}</div>
+    <h3>How much of each day’s teaching QA reviewed</h3>
+    <p class="note">Of the lecture and practice sessions held each day, the share that got a completed QA report${lastCov ? ` (on ${day(lastCov.date)}: ${lastCov.with_qa.toLocaleString()} of ${lastCov.sessions.toLocaleString()}, ${lastCov.coverage}%)` : ""}. A dip means sessions went unreviewed that day; it says nothing about how good they were. Hollow points had fewer than 50 sessions, so the percentage swings easily.</p><div class="chart" id="cCov"></div>${dlBtn(null, "network_daily", "net")}</div>
     <div class="panel"><h2 class="sec">Watchlist history</h2><p class="note">Red = on the watchlist that day (rolling 14 days vs the 14 before).</p>
     <h3>Lectures${dlBtn(null, "watchlist_lecture", "wl-lecture")}</h3>${wlGrid("lecture")}<h3>Practice${dlBtn(null, "watchlist_practice", "wl-practice")}</h3>${wlGrid("practice")}</div>
     <div class="panel"><h2 class="sec">Capability Managers × day</h2><p class="note">Connects completed each day (hover for completion rate and bottom-quarter instructors still waiting for a connect). Last column: bottom-quarter instructors not connected in 14 days, on ${day(M.to)}.</p>

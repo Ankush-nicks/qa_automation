@@ -149,6 +149,9 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 @media (prefers-reduced-motion:reduce){.toast,.drop{transition:none}}
 .hidden{display:none!important}
+.pagenav{display:flex;gap:4px;margin-bottom:10px;font-size:14px}
+.pagenav a{color:var(--muted);text-decoration:none;padding:4px 10px;border-radius:999px;border:1px solid var(--line)}
+.pagenav a[aria-current="page"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
 </style>
 <style>
 .statusbar{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:14px}
@@ -185,13 +188,14 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
 <div class="wrap">
   <header class="top">
     <div>
+      <nav class="pagenav" aria-label="Pages"><a aria-current="page" href="/">Instructor emails</a><a href="/manager">Manager analysis</a></nav>
       <h1>QA email drafts</h1>
       <p class="sub">Upload the instructor QA export (last 7 days). An instructor is flagged when each of their last 3 days with QA reviews has a daily average below the threshold; days without reviews are skipped. Flagged instructors get an email written by AI from their scores and the updated rubrics, with a rule-based draft as a fallback.</p>
     </div>
     <div class="filebar hidden" id="filebar">
       <span id="fileName"></span>
       <label class="btn ghost small" for="fileInput2">Replace file</label>
-      <input type="file" id="fileInput2" accept=".csv,.xlsx,.xlsm,text/csv">
+      <input type="file" id="fileInput2" accept=".csv,.xlsx,.xlsm,.zip,text/csv,application/zip">
     </div>
   </header>
 
@@ -209,9 +213,9 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
 
   <section class="drop" id="drop">
     <h2>Drop the QA export here</h2>
-    <p>Use the CSV (or Excel) export with day-wise averages, <code>qa_reports_json</code> and <code>session_rubric_evidence_json</code> columns. Both lecture and practice sessions are counted.</p>
+    <p>Use the daily <code>qa_exports_YYYYMMDD.zip</code> (its instructor file is used), or the CSV (or Excel) export with day-wise averages, <code>qa_reports_json</code> and <code>session_rubric_evidence_json</code> columns. Both lecture and practice sessions are counted.</p>
     <label class="btn" for="fileInput">Choose file</label>
-    <input type="file" id="fileInput" accept=".csv,.xlsx,.xlsm,text/csv">
+    <input type="file" id="fileInput" accept=".csv,.xlsx,.xlsm,.zip,text/csv,application/zip">
     <p class="fine">The file is processed on this server and isn’t stored. Only the selected instructor’s scores are sent to the AI when you write an email.</p>
     <div class="err" id="err" role="alert"></div>
     <div class="loading hidden" id="loading" role="status" aria-live="polite">
@@ -325,6 +329,8 @@ async function loadStatus(){
       : state.send.mode==="live" ? `<span class="dot on"></span>Sending via ${esc(state.send.provider_name)}: <b>live</b>, emails go to instructors`
       : state.send.mode==="dryrun" ? `<span class="dot test"></span>Sending via ${esc(state.send.provider_name)}: <b>dry run</b>, Send tests the connection and no email goes out`
       : `<span class="dot test"></span>Sending via ${esc(state.send.provider_name)}: <b>test mode</b>, every email goes to ${esc(state.send.test_to)}`;
+    if(state.send.configured&&state.send.provider==="resend")
+      $("sendStatus").innerHTML += state.send.log ? " · logged in the Google Sheet" : " · <b>no Google Sheet log</b>, so repeats aren’t checked";
     $("mgrStatus").textContent = j.managers&&j.managers.count
       ? `Capability managers: ${j.managers.file} (${j.managers.count}), matched to the names in column F`
       : "No capability manager list found on the server.";
@@ -554,7 +560,9 @@ async function sendEmail(id){
     const t=new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"});
     if(!j.dry_run) state.sent[id]=j.test?`Test sent ${t}`:`Sent ${t}`;
     if(!j.dry_run&&!j.test&&state.history) state.history.byId.set(normId(x.id),new Date());
-    toast(j.dry_run?`Dry run OK: ${via} received the email. Nothing was sent.`
+    toast(j.warning ? j.warning
+      : j.dry_run ? (sd.provider==="resend" ? `Dry run OK: the email was checked${sd.log?" and logged in the sheet":""}. Nothing was sent.`
+                                            : `Dry run OK: ${via} received the email. Nothing was sent.`)
       : j.test?`Test email sent to ${j.to}`:`Email sent to ${x.name}`);
   }catch(e){ toast(e.message); }
   delete state.sending[id]; render();

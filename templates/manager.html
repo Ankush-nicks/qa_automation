@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Manager analysis</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F5F6FA; --surface:#FFFFFF; --ink:#18213F; --muted:#59627A; --line:#DCE0EA;
+  --accent:#2B3F8F; --accent-ink:#FFFFFF; --accent-tint:#E8ECF8;
+  --low:#B3261E; --low-bg:#FBE8E6; --mid:#7E5300; --mid-bg:#FCEFD3; --ok:#1E6A49; --ok-bg:#E1F1E8; --none-bg:#ECEEF3;
+  --orange:#B54708; --orange-bg:#FDEAD7;
+  --s1:#2a78d6; --s2:#eb6834; --grid:#E6E9F0;
+  --done:#1E6A49; --missed:#B3261E; --resched:#C98500; --pending:#8C93A8;
+  color-scheme: light; box-sizing:border-box;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#11152A; --surface:#191E35; --ink:#E6E9F3; --muted:#A0A7BC; --line:#2D3450;
+    --accent:#93A7F2; --accent-ink:#11152A; --accent-tint:#252D52;
+    --low:#FF8F85; --low-bg:#3B1E24; --mid:#F1C266; --mid-bg:#3A2F17; --ok:#7ED0A6; --ok-bg:#163327; --none-bg:#242A43;
+    --orange:#F5A06B; --orange-bg:#3A2418;
+    --s1:#3987e5; --s2:#d95926; --grid:#283050;
+    --done:#4FB383; --missed:#E66767; --resched:#D9A33A; --pending:#7A8199;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#11152A; --surface:#191E35; --ink:#E6E9F3; --muted:#A0A7BC; --line:#2D3450;
+  --accent:#93A7F2; --accent-ink:#11152A; --accent-tint:#252D52;
+  --low:#FF8F85; --low-bg:#3B1E24; --mid:#F1C266; --mid-bg:#3A2F17; --ok:#7ED0A6; --ok-bg:#163327; --none-bg:#242A43;
+  --orange:#F5A06B; --orange-bg:#3A2418;
+  --s1:#3987e5; --s2:#d95926; --grid:#283050;
+  --done:#4FB383; --missed:#E66767; --resched:#D9A33A; --pending:#7A8199;
+  color-scheme: dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 "Public Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1280px;margin:0 auto;padding:28px 16px 56px}
+header.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;margin-bottom:18px}
+h1{font-size:28px;line-height:1.15;margin:0;font-weight:700;letter-spacing:-0.015em}
+.sub{margin:6px 0 0;color:var(--muted);max-width:70ch}
+.pagenav{display:flex;gap:4px;margin-bottom:10px;font-size:14px}
+.pagenav a{color:var(--muted);text-decoration:none;padding:4px 10px;border-radius:999px;border:1px solid var(--line)}
+.pagenav a[aria-current="page"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);padding:9px 16px;border-radius:8px;font-weight:600;cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn.small{padding:6px 12px;font-size:14px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.drop{border:2px dashed var(--line);border-radius:14px;background:var(--surface);padding:56px 24px;text-align:center}
+.drop.over{border-color:var(--accent);background:var(--accent-tint)}
+.drop h2{margin:0 0 6px;font-size:22px;font-weight:600}
+.drop p{margin:0 auto 18px;color:var(--muted);max-width:60ch}
+.drop .fine{font-size:13px;margin-top:18px;margin-bottom:0}
+.err{margin-top:16px;padding:12px 14px;border-radius:8px;background:var(--low-bg);color:var(--low);text-align:left}
+.loading{display:flex;flex-direction:column;align-items:center;gap:10px}
+.spin{width:30px;height:30px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.controls{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:flex-end;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+.field label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.field input,.field select{padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:var(--paper)}
+.filebar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;color:var(--muted);font-size:14px;margin-left:auto;min-width:0}
+.filebar span{overflow-wrap:anywhere}
+.checks{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.check{border-left:4px solid var(--line);background:var(--surface);border-radius:0 8px 8px 0;padding:8px 12px;font-size:14px}
+.check.ok{border-color:var(--ok)} .check.warn{border-color:var(--mid);background:var(--mid-bg)} .check.info{border-color:var(--accent)}
+.headline{font-size:16px;margin:4px 0 14px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.tab{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 14px;font-size:14px;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+.panel+.panel{margin-top:14px}
+h2.sec{font-size:19px;margin:0 0 4px}
+h3{font-size:16px;margin:20px 0 8px}
+h3:first-child{margin-top:0}
+.note{color:var(--muted);font-size:13.5px;margin:6px 0 0;max-width:110ch}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:13px;background:var(--paper);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.bad{color:var(--low);font-weight:700}
+.dim{color:var(--muted)}
+.pill{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;padding:1px 8px;white-space:nowrap}
+.pill.red{background:var(--low-bg);color:var(--low)} .pill.orange{background:var(--orange-bg);color:var(--orange)}
+.pill.amber{background:var(--mid-bg);color:var(--mid)} .pill.green{background:var(--ok-bg);color:var(--ok)}
+.pill.grey{background:var(--none-bg);color:var(--muted)}
+tr.noteline td{border-top:0;padding-top:0;color:var(--muted);font-size:13px}
+tr.hasnote td{border-bottom:0}
+.acts{list-style:none;margin:0;padding:0;counter-reset:a}
+.acts li{display:grid;grid-template-columns:28px 1fr;gap:4px;padding:10px 0;border-bottom:1px solid var(--line)}
+.acts li:last-child{border-bottom:0}
+.acts .n{font-weight:700;color:var(--accent)}
+.acts .l{color:var(--muted);font-size:14px}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 4px}
+.stat{border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:130px}
+.stat .v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.stat .k{font-size:13px;color:var(--muted)}
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--muted);margin:4px 0 6px}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
+.legend i.sq{height:10px;width:10px;border-radius:2px}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--paper);font-size:12.5px;padding:6px 9px;border-radius:6px;white-space:nowrap;transform:translate(-50%,-110%);opacity:0;transition:opacity .1s;z-index:5}
+.tip.on{opacity:1}
+.grid-days{display:grid;gap:2px;align-items:center}
+.gcell{height:16px;border-radius:3px;background:var(--none-bg)}
+.gcell.on{background:var(--low)}
+.glbl{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:8px}
+.ghead{font-size:11px;color:var(--muted);text-align:center}
+.emailbar{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:12px}
+.emailbar .field{flex:1 1 260px}
+.emailbar .field input{width:100%}
+iframe.preview{width:100%;height:900px;border:1px solid var(--line);border-radius:10px;background:#f2f4f7}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:8px;font-weight:600;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;z-index:20;max-width:min(92vw,640px)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.busyline{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px;margin:0 0 10px}
+.busyline .spin{width:16px;height:16px;border-width:2px}
+.mpick{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:6px}
+.hidden{display:none!important}
+.dl{font-size:13px;margin-left:8px}
+.dl button{background:none;border:0;color:var(--accent);cursor:pointer;text-decoration:underline;padding:0;font-size:13px}
+.sendstatus{font-size:14px;color:var(--muted)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.dot.on{background:var(--ok)} .dot.off{background:var(--mid)} .dot.test{background:#E8A317}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <nav class="pagenav" aria-label="Pages"><a href="/">Instructor emails</a><a aria-current="page" href="/manager">Manager analysis</a></nav>
+      <h1>Manager analysis</h1>
+      <p class="sub">Upload the daily BigQuery zip to see where to focus by campus, subject and Capability Manager, plus the month so far, and send the daily email. It describes and compares; there are no fixed score cut-offs.</p>
+    </div>
+  </header>
+
+  <section class="drop" id="drop">
+    <div id="dropIdle">
+      <h2>Drop today’s qa_exports zip here</h2>
+      <p>The <code>qa_exports_YYYYMMDD.zip</code> from <code>bash ~/bigquery/daily_cloudshell.sh</code>. You can also choose the four CSVs (qa_daily, manager_map, manager_connects, manager_activity) together.</p>
+      <label class="btn" for="fileInput">Choose file</label>
+      <input type="file" id="fileInput" accept=".zip,.csv,application/zip,text/csv" multiple>
+      <p class="fine">Processed on this server in memory and not stored. Contains instructor names: internal use only.</p>
+    </div>
+    <div class="loading hidden" id="dropBusy" role="status" aria-live="polite"><span class="spin" aria-hidden="true"></span><b>Reading the export and building the analysis…</b><span class="dim">This takes a few seconds.</span></div>
+    <div class="err hidden" id="err" role="alert"></div>
+  </section>
+
+  <section id="app" class="hidden">
+    <div class="controls">
+      <div class="field"><label for="date">Report date</label><input type="date" id="date"></div>
+      <div class="field"><label for="month">Month view</label><input type="month" id="month"></div>
+      <span class="sendstatus" id="sendStatus"></span>
+      <div class="filebar"><span id="fileName"></span><label class="btn ghost small" for="fileInput2">Replace file</label>
+        <input type="file" id="fileInput2" accept=".zip,.csv,application/zip,text/csv" multiple></div>
+    </div>
+    <div class="busyline hidden" id="busy" role="status"><span class="spin" aria-hidden="true"></span>Updating…</div>
+    <div class="err hidden" id="err2" role="alert"></div>
+    <div class="checks" id="checks"></div>
+    <p class="headline" id="headline"></p>
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div id="view"></div>
+  </section>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const WD = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const dt = s => { const [y,m,d] = String(s).split("-").map(Number); return new Date(y, m-1, d); };
+const day = s => s ? `${dt(s).getDate()} ${MON[dt(s).getMonth()]}` : "no data";
+const wday = s => s ? `${WD[dt(s).getDay()]} ${day(s)}` : "no data";
+const n2 = v => v == null ? '<span class="dim">no data</span>' : Number(v).toFixed(2);
+const sg = v => v == null ? '<span class="dim">no data</span>' : (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(2);
+const pct = v => v == null ? '<span class="dim">no data</span>' : v + "%";
+let files = null, D = null, tab = "act", pickMgr = null, sendCfg = null, showAllSubj = false;
+try { tab = localStorage.getItem("mgr.tab") || "act"; } catch (e) {}
+
+function toast(msg, ms = 3200) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), ms); }
+function showErr(where, msg) { const e = $(where); e.textContent = msg; e.classList.toggle("hidden", !msg); }
+
+// ------------------------------------------------------------------ upload
+async function run(first) {
+  if (!files) return;
+  const fd = new FormData();
+  for (const f of files) fd.append("files", f, f.name);
+  if (!first) { fd.append("report_date", $("#date").value); fd.append("month", $("#month").value); }
+  if (first) { $("#dropIdle").classList.add("hidden"); $("#dropBusy").classList.remove("hidden"); showErr("#err", ""); }
+  else { $("#busy").classList.remove("hidden"); showErr("#err2", ""); }
+  try {
+    const r = await fetch("/api/manager/analyze", {method: "POST", body: fd});
+    const j = await r.json().catch(() => ({error: `The server answered ${r.status}.`}));
+    if (!r.ok || j.error) throw new Error(j.error || `The server answered ${r.status}.`);
+    D = j;
+    if (!pickMgr || !D.managers.includes(pickMgr)) pickMgr = D.managers[0] || null;
+    $("#drop").classList.add("hidden"); $("#app").classList.remove("hidden");
+    render();
+  } catch (e) {
+    if (first) { $("#dropIdle").classList.remove("hidden"); showErr("#err", e.message); }
+    else showErr("#err2", e.message);
+  } finally {
+    $("#dropBusy").classList.add("hidden"); $("#busy").classList.add("hidden");
+  }
+}
+function takeFiles(list) {
+  if (!list || !list.length) return;
+  files = Array.from(list); $("#fileName").textContent = files.map(f => f.name).join(", ");
+  run(!D);
+}
+$("#fileInput").addEventListener("change", e => takeFiles(e.target.files));
+$("#fileInput2").addEventListener("change", e => { D = null; takeFiles(e.target.files); });
+const drop = $("#drop");
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => takeFiles(e.dataTransfer.files));
+$("#date").addEventListener("change", () => run(false));
+$("#month").addEventListener("change", () => run(false));
+
+fetch("/api/status").then(r => r.json()).then(j => {
+  sendCfg = j.send || null;
+  const s = sendCfg;
+  if (!s || !s.configured) { $("#sendStatus").innerHTML = '<span class="dot off"></span>Sending isn’t set up: use Copy HTML'; return; }
+  const mode = {dryrun: "dry run (nothing is sent)", test: `test mode (only ${esc(s.test_to)})`, live: "live"}[s.mode] || s.mode;
+  $("#sendStatus").innerHTML = `<span class="dot ${s.mode === "live" ? "on" : "test"}"></span>Send: ${esc(s.provider_name)} · ${mode}`;
+}).catch(() => {});
+
+// ------------------------------------------------------------------ render
+const TABS = [["act","Act on these today"],["campus","Campus analysis"],["connects","Manager connect usage"],["detail","Manager detail"],["month","Month view"],["email","Daily email"]];
+function render() {
+  $("#date").value = D.report_date; $("#date").max = D.latest_date;
+  $("#month").value = D.month; $("#month").max = D.latest_date.slice(0, 7);
+  const checks = [...D.bundle.checks, ...D.checks];
+  $("#checks").innerHTML = checks.map(c => `<div class="check ${c.level}">${esc(c.text)}</div>`).join("");
+  const h = D.headline;
+  $("#headline").innerHTML = `<b>${wday(D.report_date)}:</b> <b>${h.taught} of ${h.campuses}</b> campuses taught · ${h.sessions.toLocaleString()} lecture/practice sessions · <b>${h.coverage ?? "no data"}%</b> with QA · average <b>${n2(h.avg)}</b> (${h.scored.toLocaleString()} evaluations) vs ${n2(h.avg_p7)} over the previous 7 days`;
+  $("#tabs").innerHTML = TABS.map(([k, l], i) => `<button class="tab" role="tab" aria-selected="${k === tab}" data-tab="${k}">${i + 1}. ${l}</button>`).join("");
+  $("#tabs").querySelectorAll(".tab").forEach(b => b.onclick = () => { tab = b.dataset.tab; try { localStorage.setItem("mgr.tab", tab); } catch (e) {} render(); });
+  const fn = {act: vAct, campus: vCampus, connects: vConnects, detail: vDetail, month: vMonth, email: vEmail}[tab] || vAct;
+  $("#view").innerHTML = ""; fn($("#view"));
+}
+const table = (heads, rows, id) => `<div class="tbl"${id ? ` id="${id}"` : ""}><table><thead><tr>${heads.map(h => `<th class="${h[1] || ""}">${h[0]}</th>`).join("")}</tr></thead><tbody>${rows.join("") || `<tr><td colspan="${heads.length}" class="dim">Nothing to show.</td></tr>`}</tbody></table></div>`;
+const pill = (t, c) => `<span class="pill ${c}">${esc(t)}</span>`;
+
+// 1. Act on these today
+function vAct(el) {
+  el.innerHTML = `<div class="panel"><h2 class="sec">Act on these today</h2><p class="note">Built from the tabs below. Same five items as the daily email.</p>
+    <ol class="acts">${D.act.map((a, i) => `<li><span class="n">${i + 1}</span><span><b>${a.bold}</b>${a.line ? `<br><span class="l">${a.line}</span>` : ""}</span></li>`).join("")}</ol></div>`;
+}
+
+// 2. Campus analysis
+function vCampus(el) {
+  const idle = table([["Campus"],["Last session (any type)"],["Without sessions","num"]],
+    D.idle.map(r => `<tr><td>${esc(r.short)}</td><td>${day(r.last)}</td><td class="num">${r.days == null ? "no data" : r.days + " days"}</td></tr>`), "t-idle");
+  const cov = table([["Campus"],["Sessions","num"],["With QA","num"],["Yesterday","num"],["Usual (27 days)","num"],["Note"]],
+    D.coverage.map(r => `<tr><td>${esc(r.short)}</td><td class="num">${r.sessions}</td><td class="num">${r.with_qa}</td><td class="num">${r.below ? `<span class="bad">${r.pct}%</span>` : r.pct + "%"}</td><td class="num dim">${pct(r.usual)}</td><td>${esc(r.note)}</td></tr>`), "t-cov");
+  const wl = t => {
+    const w = D.watchlist[t];
+    const rows = w.rows.map(r => {
+      const s = r.subject;
+      const st = pill(r.status, r.status === "New today" ? "red" : r.status === "Still on list" ? "orange" : "grey");
+      if (!s) return `<tr><td><b>${esc(r.short)}</b><br>${st}</td><td class="num">${sg(r.gap_p)} → <span class="bad">${sg(r.gap)}</span></td><td colspan="3" class="dim">${r.status === "Removed today" ? "Back within normal variation (not yet a recovery)" : "no data"}</td></tr>`;
+      const rub = s.rubrics.length ? s.rubrics.map(x => `${esc(x.name)} ${n2(x.before)} → <span class="bad">${n2(x.now)}</span> <span class="dim">(others ${n2(x.others)})</span>`).join("<br>")
+        : `<span class="dim">${s.no_rubric ? "No rubric scores for this subject" : "No rubric fell"}</span>`;
+      return `<tr><td><b>${esc(r.short)}</b><br>${st}</td><td class="num">${sg(r.gap_p)} → <span class="bad">${sg(r.gap)}</span><br><span class="dim">${r.n} evals (prev ${r.n_p})</span></td>
+        <td>${esc(s.subject)}${s.also ? `<br><span class="dim">also ${esc(s.also.subject)}: ${n2(s.also.avg)} vs ${n2(s.also.others)} (${s.also.n} evals)</span>` : ""}</td>
+        <td class="num"><span class="bad">${n2(s.avg)}</span> vs ${n2(s.others)}<br><span class="dim">${s.n} evals · was ${n2(s.was)}</span></td><td>${rub}</td></tr>`;
+    });
+    const close = w.close.length ? `<p class="note"><b>Close to the line:</b> ${w.close.map(c => `${esc(c.short)} ${sg(c.chg)} (${c.n} evals)`).join(", ")}</p>` : "";
+    return `<h3>${t === "lecture" ? "Lectures" : "Practice"} — ${w.rows.length} listed <span class="dim">(${w.down} of ${w.compared} campuses declined)</span></h3>` +
+      table([["Campus + status"],["Campus gap (prev 14d → last 14d)","num"],["Subject most affected"],["Subject avg vs other campuses","num"],["Rubric that fell most"]], rows, "t-wl-" + t) + close;
+  };
+  el.innerHTML = `<div class="panel"><h2 class="sec">Campus analysis — ${wday(D.report_date)}</h2>
+    <h3>No sessions on ${day(D.report_date)} — ${D.idle.length}${dlBtn("t-idle","idle_campuses")}</h3>${idle}
+    <h3>QA coverage — lowest five${dlBtn("t-cov","qa_coverage")}</h3>${cov}
+    <p class="note">Coverage = sessions with a completed report ÷ sessions scheduled (lecture + practice). Usual = the campus’s previous 27 days.</p></div>
+    <div class="panel"><h2 class="sec">Watchlist — campuses losing ground against the same subjects elsewhere</h2>
+    <p class="note">Last 14 days vs the 14 days before. Listed when the drop is below −2 × standard error (SD 1.2 lecture, 1.9 practice), with 20+ evaluations in each period. Gap = campus average minus the same subjects and session type at other campuses, weighted by the campus’s own mix.</p>
+    ${wl("lecture")}${wl("practice")}</div>`;
+}
+
+// 3. Manager connect usage
+function vConnects(el) {
+  const c = D.connects, g = D.connect_groups;
+  const heads = [["Manager"],["Instructors","num"],["Connects<br>" + c.days.map(d => dt(d).getDate()).join(" · ") + "*","num"],["Done / missed /<br>resched / not updated","num"],["Usual<br>completion","num"],["Last completed"],["Platform use (3 days)"]];
+  const rows = c.rows.map(r => {
+    const use = r.use.days ? `${r.use.days} of ${r.use.of} days<br><span class="dim">${r.use.tab} connect-tab · ${r.use.qa} QA reports</span>`
+      : (r.use.last_seen && r.use.last_seen.length ? r.use.last_seen.map(x => `${esc(x.name)} ${x.last ? "last seen " + day(x.last) : "never seen"}`).join("<br>") : "No platform activity");
+    const lastS = r.total === 0 && r.last_scheduled && r.last_scheduled !== r.last_completed ? `<br><span class="dim">last scheduled ${day(r.last_scheduled)}</span>` : "";
+    return `<tr class="${r.note ? "hasnote" : ""}"><td><b>${esc(r.manager)}</b><br>${pill(r.tag, r.color)}</td><td class="num">${r.instructors}</td><td class="num">${r.per_day.join(" · ")}</td>
+      <td class="num">${r.total ? `${r.done} / ${r.missed} / ${r.resched} / ${r.pending}` : "—"}</td><td class="num">${r.usual == null ? "—" : r.usual < 50 ? `<span class="bad">${r.usual}%</span>` : r.usual + "%"}</td>
+      <td>${r.last_completed ? day(r.last_completed) : "Never"}${lastS}</td><td>${use}</td></tr>` + (r.note ? `<tr class="noteline"><td colspan="7">${r.note}</td></tr>` : "");
+  });
+  el.innerHTML = `<div class="panel"><h2 class="sec">Manager connect usage — ${wday(c.from)} to ${wday(c.to)}</h2>
+    <p class="note"><b>${g.none.managers} managers</b> (${g.none.instructors} instructors) recorded no connects · ${g.zero.managers} (${g.zero.instructors}) completed none · ${g.half.managers} completed under half or just started · ${g.normal.managers} using it normally.</p>
+    <p class="note">* ${day(c.provisional)} is provisional: statuses and new slots keep arriving for about a day, so tags are judged on the days before it. Usual completion = completed ÷ scheduled, ${day(c.usual_from)} – ${day(c.usual_to)}. “Missed” means no call was captured in the tool; some connects are held but not recorded.</p>
+    <h3>All Capability Managers${dlBtn("t-cu","manager_connects")}</h3>${table(heads, rows, "t-cu")}
+    ${c.small.length ? `<p class="note">Not in the table (under 3 instructors): ${c.small.map(s => `${esc(s.manager)} (${s.instructors})`).join(", ")}.</p>` : ""}</div>`;
+}
+
+// 4. Manager detail
+function vDetail(el) {
+  const m = D.manager_details[pickMgr];
+  const opts = D.managers.map(x => `<option ${x === pickMgr ? "selected" : ""}>${esc(x)}</option>`).join("");
+  if (!m) { el.innerHTML = `<div class="panel">No Capability Managers in this export.</div>`; return; }
+  const rows = m.rows.map(r => {
+    const dates = r.dates.length ? r.dates.map(day).join(", ") : "no QA days";
+    const cs = r.connect_status ? `${esc(r.connect_status)} <span class="dim">${day(r.connect_date)}</span>` : '<span class="dim">none on record</span>';
+    const tags = (r.bottomq ? " " + pill("bottom quarter", "red") : "") + (r.not_connected ? " " + pill("not connected 14d", "amber") : "") + (!r.eligible ? " " + pill("not ranked", "grey") : "");
+    return `<tr><td><b>${esc(r.name)}</b>${tags}</td><td>${esc(r.campus || "no data")}<br><span class="dim">${esc(r.subject || "")}</span></td>
+      <td class="num">${n2(r.avg)} <span class="dim">(${r.prev == null ? "no data" : r.prev.toFixed(2)})</span><br><span class="dim">${dates} · ${r.n ?? 0} evals</span></td>
+      <td>${r.last_connect ? day(r.last_connect) : '<span class="dim">never</span>'}</td><td>${cs}</td></tr>`;
+  });
+  el.innerHTML = `<div class="panel"><div class="mpick"><div class="field"><label for="mgrPick">Capability Manager</label><select id="mgrPick">${opts}</select></div></div>
+    <div class="stats">
+      <div class="stat"><div class="v">${m.instructors}</div><div class="k">instructors</div></div>
+      <div class="stat"><div class="v">${m.avg == null ? "no data" : m.avg.toFixed(2)}</div><div class="k">average, last 3 QA days (prev ${m.prev == null ? "no data" : m.prev.toFixed(2)}) · ${m.n} evals</div></div>
+      <div class="stat"><div class="v">${m.bottomq}</div><div class="k">in the bottom quarter (≤ ${D.bottom_cut ?? "no data"})</div></div>
+      <div class="stat"><div class="v">${m.not_connected}</div><div class="k">ranked, no completed connect in 14 days</div></div>
+    </div>
+    <p class="note">Instructor average = last 3 days with QA (evaluation-weighted), previous 3 in brackets. Ranked = 3 QA days, the latest within 14 days, active. Bottom quarter = ranked instructors at or below the 25th percentile network-wide (${D.bottom_cut ?? "no data"} on ${day(D.report_date)}).</p>
+    <h3>Instructors, lowest first${dlBtn("t-md","manager_" + pickMgr.replace(/\W+/g, "_"))}</h3>
+    ${table([["Instructor"],["Campus · subject"],["Last 3 QA days (prev)","num"],["Last completed connect"],["Connect on record"]], rows, "t-md")}
+    <h3>Connect history — ${D.month_view.from ? MON[dt(D.month_view.from).getMonth()] : ""}</h3><div id="hist"></div>
+    <p class="note">QA before and after a connect is an association, not proof that the connect caused a change.</p></div>`;
+  $("#mgrPick").onchange = e => { pickMgr = e.target.value; render(); };
+  barsChart($("#hist"), m.history);
+}
+
+// 5. Month view
+function vMonth(el) {
+  const M = D.month_view;
+  const days = M.network.map(r => r.date);
+  const wlGrid = t => {
+    const rows = M.watchlist[t];
+    if (!rows.length) return '<p class="note">No campus was on this list this month.</p>';
+    const head = `<span></span>` + days.map(d => `<span class="ghead">${dt(d).getDate()}</span>`).join("");
+    const body = rows.map(r => `<span class="glbl" title="${esc(r.campus)}">${esc(r.short)} <span class="dim">${r.days}d</span></span>` +
+      days.map(d => `<span class="gcell ${r.on.includes(d) ? "on" : ""}" title="${esc(r.short)} · ${day(d)} · ${r.on.includes(d) ? "on the list" : "not listed"}"></span>`).join("")).join("");
+    return `<div style="overflow-x:auto"><div class="grid-days" style="grid-template-columns:minmax(110px,190px) repeat(${days.length},minmax(10px,1fr));min-width:${110 + days.length * 12}px">${head}${body}</div></div>`;
+  };
+  const mrows = M.managers.map(r => `<tr><td>${esc(r.manager)}</td><td class="num">${r.done} of ${r.total}</td>` +
+    r.days.map(x => `<td class="num" title="${day(x.date)}: ${x.done} done of ${x.n}${x.rate == null ? "" : ` (${x.rate}% of settled)`}; ${x.waiting} bottom-quarter not connected">${x.n ? x.done : '<span class="dim">·</span>'}</td>`).join("") +
+    `<td class="num">${r.days.length ? r.days[r.days.length - 1].waiting : 0}</td></tr>`);
+  const srows = M.subjects.filter((s, i) => showAllSubj || i < 25).map(s => `<tr><td>${esc(s.subject)}</td><td>${s.type}</td><td class="num">${n2(s.avg)}</td><td class="num">${n2(s.prev)}</td><td class="num">${s.n.toLocaleString()}</td><td class="num">${s.prev_n.toLocaleString()}</td><td class="num">${s.campuses}</td></tr>`);
+  el.innerHTML = `<div class="panel"><h2 class="sec">Month view — ${day(M.from)} to ${day(M.to)}</h2>
+    <h3>Network daily average</h3><div class="legend"><span><i style="background:var(--s1)"></i>Lecture</span><span><i style="background:var(--s2)"></i>Practice</span></div><div class="chart" id="cAvg"></div>
+    <h3>QA coverage, lecture + practice</h3><div class="chart" id="cCov"></div>${dlBtn(null, "network_daily", "net")}</div>
+    <div class="panel"><h2 class="sec">Watchlist history</h2><p class="note">Red = on the watchlist that day (rolling 14 days vs the 14 before).</p>
+    <h3>Lectures${dlBtn(null, "watchlist_lecture", "wl-lecture")}</h3>${wlGrid("lecture")}<h3>Practice${dlBtn(null, "watchlist_practice", "wl-practice")}</h3>${wlGrid("practice")}</div>
+    <div class="panel"><h2 class="sec">Capability Managers × day</h2><p class="note">Connects completed each day (hover for completion rate and bottom-quarter instructors still waiting for a connect). Last column: bottom-quarter instructors not connected in 14 days, on ${day(M.to)}.</p>
+    ${dlBtn("t-mx","managers_by_day")}${table([["Manager"],["Done","num"], ...days.map(d => [String(dt(d).getDate()), "num"]), ["Waiting","num"]], mrows, "t-mx")}</div>
+    <div class="panel"><h2 class="sec">Subjects — month so far vs the ${M.network.length} days before</h2><p class="note">Previous period: ${day(M.prev_from)} – ${day(M.prev_to)}.</p>
+    ${dlBtn("t-subj","subjects")}${table([["Subject"],["Type"],["Average","num"],["Before","num"],["Evals","num"],["Evals before","num"],["Campuses","num"]], srows, "t-subj")}
+    ${M.subjects.length > 25 ? `<p class="note">${showAllSubj ? `All ${M.subjects.length} subjects.` : `The 25 with the most evaluations, of ${M.subjects.length}.`} <button class="btn ghost small" id="subjAll">${showAllSubj ? "Show top 25" : "Show all"}</button></p>` : ""}</div>`;
+  const sa = $("#subjAll"); if (sa) sa.onclick = () => { showAllSubj = !showAllSubj; render(); };
+  lineChart($("#cAvg"), days, [{k: "lecture", n: "n_lecture", label: "Lecture", color: "var(--s1)"}, {k: "practice", n: "n_practice", label: "Practice", color: "var(--s2)"}], M.network, {fmt: v => v.toFixed(2)});
+  lineChart($("#cCov"), days, [{k: "coverage", n: "sessions", label: "Coverage", color: "var(--s1)"}], M.network, {fmt: v => v + "%", min: 0, max: 100, count: "sessions"});
+}
+
+// 6. Daily email
+function vEmail(el) {
+  const E = D.email;
+  el.innerHTML = `<div class="panel"><h2 class="sec">Daily email</h2>
+    <p class="note">Exactly the approved email, filled with ${wday(D.report_date)}’s numbers. Internal: it names instructors.</p>
+    <div class="emailbar">
+      <div class="field"><label for="eTo">To (QA leads)</label><input id="eTo" value="${esc(E.to.join(", "))}" placeholder="Set DAILY_TO on the server, or type addresses"></div>
+      <div class="field"><label for="eCc">CC (Capability Managers)</label><input id="eCc" value="${esc(E.cc.join(", "))}"></div>
+    </div>
+    <div class="field" style="margin-bottom:12px"><label for="eSubj">Subject</label><input id="eSubj" style="width:100%" value="${esc(E.subject)}"></div>
+    <div class="emailbar"><button class="btn ghost" id="ePrev">Preview</button><button class="btn ghost" id="eCopy">Copy HTML</button><button class="btn" id="eSend">Send</button></div>
+    <iframe class="preview" id="eFrame" title="Daily email preview"></iframe></div>`;
+  $("#eFrame").srcdoc = E.preview;
+  $("#ePrev").onclick = () => { const w = window.open("", "_blank"); if (w) { w.document.write(E.preview); w.document.close(); } };
+  $("#eCopy").onclick = async () => {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({"text/html": new Blob([E.html], {type: "text/html"}), "text/plain": new Blob([E.text], {type: "text/plain"})})]);
+      toast("Copied with formatting. Paste it into a new email.");
+    } catch (e) {
+      try { await navigator.clipboard.writeText(E.html); toast("Copied the HTML source."); } catch (e2) { toast("Couldn’t copy: the browser blocked the clipboard."); }
+    }
+  };
+  $("#eSend").onclick = () => sendDaily(false);
+}
+async function sendDaily(force) {
+  const to = $("#eTo").value.trim(), cc = $("#eCc").value.trim(), subject = $("#eSubj").value.trim();
+  if (!to) { toast("Add at least one To address (QA leads)."); $("#eTo").focus(); return; }
+  const mode = sendCfg && sendCfg.mode;
+  const what = mode === "test" ? `TEST mode: it goes only to ${sendCfg.test_to}.` : mode === "live" ? `LIVE: to ${to}${cc ? ` and CC ${cc.split(",").length} Capability Managers` : ""}.` : "Dry run: nothing is emailed.";
+  if (!force && !confirm(`Send the daily email for ${wday(D.report_date)}?\n\n${what}`)) return;
+  const b = $("#eSend"); b.disabled = true; b.textContent = "Sending…";
+  try {
+    const r = await fetch("/api/manager/send", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({report_date: D.report_date, to, cc, subject, html: D.email.html, text: D.email.text, force})});
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 409 && j.duplicate) {
+      if (confirm(`The daily email for ${wday(D.report_date)} was already sent${j.last_sent ? " on " + new Date(j.last_sent).toLocaleString() : ""}. Send it again?`)) return sendDaily(true);
+      return;
+    }
+    if (!r.ok || j.error) throw new Error(j.error || `The server answered ${r.status}.`);
+    toast(j.dry_run ? "Dry run OK: the request reached the sender; nothing was emailed." : j.test ? `Test email sent to ${j.to}.` : `Sent to ${j.to}.` + (j.warning ? " " + j.warning : ""), 5000);
+  } catch (e) { toast(e.message, 7000); }
+  finally { b.disabled = false; b.textContent = "Send"; }
+}
+
+// ------------------------------------------------------------------ charts
+function lineChart(el, days, series, rows, o = {}) {
+  const W = 960, H = 240, L = 44, R = 16, T = 12, B = 26;
+  const vals = series.flatMap(s => rows.map(r => r[s.k]).filter(v => v != null));
+  if (!vals.length) { el.innerHTML = '<p class="note">No data in this month.</p>'; return; }
+  let lo = o.min ?? Math.floor(Math.min(...vals) - 0.3), hi = o.max ?? Math.ceil(Math.max(...vals) + 0.3);
+  if (hi - lo < 1) hi = lo + 1;
+  const x = i => L + (days.length === 1 ? (W - L - R) / 2 : i * (W - L - R) / (days.length - 1));
+  const y = v => T + (hi - v) * (H - T - B) / (hi - lo);
+  const ticks = []; const step = (hi - lo) > 20 ? 25 : (hi - lo) > 4 ? 1 : 0.5;
+  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) ticks.push(+v.toFixed(2));
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(series.map(s => s.label).join(" and "))} by day">`;
+  svg += ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${o.min === 0 ? v + "%" : v}</text>`).join("");
+  days.forEach((d, i) => { if (i % Math.ceil(days.length / 12) === 0 || i === days.length - 1) svg += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--muted)">${dt(d).getDate()} ${MON[dt(d).getMonth()]}</text>`; });
+  for (const s of series) {
+    let path = "", pen = false;
+    rows.forEach((r, i) => { const v = r[s.k]; if (v == null) { pen = false; return; } path += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); pen = true; });
+    svg += `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    const li = rows.map(r => r[s.k]).lastIndexOf(rows.map(r => r[s.k]).filter(v => v != null).slice(-1)[0]);
+    if (li >= 0) svg += `<circle cx="${x(li)}" cy="${y(rows[li][s.k])}" r="4" fill="${s.color}" stroke="var(--surface)" stroke-width="2"/>`;
+  }
+  svg += `<line id="xh" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" opacity="0"/>`;
+  svg += `<rect x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent" class="hit"/></svg><div class="tip"></div>`;
+  el.innerHTML = svg;
+  const sv = el.querySelector("svg"), tip = el.querySelector(".tip"), xh = el.querySelector("#xh");
+  sv.querySelector(".hit").addEventListener("mousemove", e => {
+    const rc = sv.getBoundingClientRect(), px = (e.clientX - rc.left) * W / rc.width;
+    const i = Math.max(0, Math.min(days.length - 1, Math.round((px - L) / ((W - L - R) / Math.max(1, days.length - 1)))));
+    xh.setAttribute("x1", x(i)); xh.setAttribute("x2", x(i)); xh.setAttribute("opacity", 1);
+    tip.innerHTML = `<b>${wday(days[i])}</b><br>` + series.map(s => `${s.label}: ${rows[i][s.k] == null ? "no data" : o.fmt(rows[i][s.k])} <span style="opacity:.75">(${(rows[i][s.n] || 0).toLocaleString()} ${o.count || "evals"})</span>`).join("<br>");
+    tip.style.left = (x(i) * rc.width / W) + "px"; tip.style.top = (T * rc.height / H + 20) + "px"; tip.classList.add("on");
+  });
+  sv.querySelector(".hit").addEventListener("mouseleave", () => { tip.classList.remove("on"); xh.setAttribute("opacity", 0); });
+}
+function barsChart(el, hist) {
+  const keys = [["done","Done","var(--done)"],["missed","Missed","var(--missed)"],["resched","Rescheduled","var(--resched)"],["pending","Not updated","var(--pending)"]];
+  if (!hist.some(h => keys.some(k => h[k[0]]))) { el.innerHTML = '<p class="note">No connects scheduled this month.</p>'; return; }
+  const W = 960, H = 170, L = 30, R = 10, T = 10, B = 24;
+  const max = Math.max(1, ...hist.map(h => keys.reduce((a, k) => a + h[k[0]], 0)));
+  const bw = (W - L - R) / Math.max(1, hist.length);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Connects by day and status">`;
+  svg += `<line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="var(--grid)"/><text x="${L - 6}" y="${T + 8}" text-anchor="end" font-size="11" fill="var(--muted)">${max}</text>`;
+  hist.forEach((h, i) => {
+    let yy = H - B; const x0 = L + i * bw + 2, w = Math.max(2, bw - 4);
+    keys.forEach(([k, , c]) => { const v = h[k]; if (!v) return; const hh = v * (H - T - B) / max; yy -= hh; svg += `<rect x="${x0}" y="${yy}" width="${w}" height="${Math.max(0, hh - 2)}" rx="2" fill="${c}"/>`; });
+    if (i % Math.ceil(hist.length / 12) === 0 || i === hist.length - 1) svg += `<text x="${x0 + w / 2}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--muted)">${dt(h.date).getDate()}</text>`;
+    svg += `<rect x="${L + i * bw}" y="${T}" width="${bw}" height="${H - T - B}" fill="transparent" data-i="${i}" class="hb"/>`;
+  });
+  svg += `</svg><div class="tip"></div>`;
+  el.innerHTML = `<div class="legend">${keys.map(([, l, c]) => `<span><i class="sq" style="background:${c}"></i>${l}</span>`).join("")}</div><div class="chart">${svg}</div>`;
+  const ch = el.querySelector(".chart"), tip = ch.querySelector(".tip"), sv = ch.querySelector("svg");
+  ch.querySelectorAll(".hb").forEach(b => {
+    b.addEventListener("mouseenter", () => {
+      const h = hist[+b.dataset.i], rc = sv.getBoundingClientRect();
+      tip.innerHTML = `<b>${wday(h.date)}</b><br>` + keys.map(([k, l]) => `${l}: ${h[k]}`).join(" · ");
+      tip.style.left = ((L + (+b.dataset.i + 0.5) * bw) * rc.width / W) + "px"; tip.style.top = "30px"; tip.classList.add("on");
+    });
+    b.addEventListener("mouseleave", () => tip.classList.remove("on"));
+  });
+}
+
+// ------------------------------------------------------------------ CSV
+function dlBtn(tableId, name, kind) { return `<span class="dl"><button data-t="${tableId || ""}" data-k="${kind || ""}" data-n="${esc(name)}" onclick="dl(this)">Download CSV</button></span>`; }
+function csv(rows) { return rows.map(r => r.map(v => { const s = String(v ?? ""); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(",")).join("\n"); }
+function dl(b) {
+  let rows;
+  const M = D.month_view;
+  if (b.dataset.k === "net") rows = [["date","sessions","with_qa","coverage_pct","lecture_avg","lecture_evals","practice_avg","practice_evals"], ...M.network.map(r => [r.date, r.sessions, r.with_qa, r.coverage, r.lecture, r.n_lecture, r.practice, r.n_practice])];
+  else if (b.dataset.k.startsWith("wl-")) { const t = b.dataset.k.slice(3); rows = [["campus","date","on_watchlist"], ...M.watchlist[t].flatMap(r => M.network.map(n => [r.campus, n.date, r.on.includes(n.date) ? 1 : 0]))]; }
+  else {
+    const t = document.getElementById(b.dataset.t); if (!t) return;
+    rows = Array.from(t.querySelectorAll("tr")).filter(tr => !tr.classList.contains("noteline")).map(tr => Array.from(tr.children).map(c => c.innerText.replace(/\s*\n\s*/g, " ").trim()));
+  }
+  const blob = new Blob(["﻿" + csv(rows)], {type: "text/csv"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${b.dataset.n}_${D.report_date}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+</script>
+</body>
+</html>

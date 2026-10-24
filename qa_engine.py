@@ -6,6 +6,7 @@ from __future__ import annotations
 import io
 import json
 import re
+import zipfile
 from datetime import date, timedelta
 from statistics import mean as _mean
 
@@ -302,7 +303,16 @@ def norm_id(s):
 # Reading the export
 # --------------------------------------------------------------------------
 def read_export(data: bytes, filename: str) -> pd.DataFrame:
-    """Returns a DataFrame with lower-case column names. Raises ValueError with a readable message."""
+    """Returns a DataFrame with lower-case column names. Raises ValueError with a readable message.
+    A zip (the daily qa_exports_YYYYMMDD.zip) is opened and its instructor file is used."""
+    if zipfile.is_zipfile(io.BytesIO(data)):
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            names = [n for n in z.namelist() if n.lower().endswith(".csv") and not n.rsplit("/", 1)[-1].startswith("._")]
+            pick = next((n for n in names if "instructor_qa" in n.lower()), None)
+            if not pick:
+                raise ValueError("This zip has no instructor QA file (instructor_qa_last3_export.csv). "
+                                 f"Files in it: {', '.join(names) or 'none'}.")
+            data, filename = z.read(pick), pick
     frames = []
     if re.search(r"\.(xlsx|xlsm|xls)$", filename or "", re.I):
         try:

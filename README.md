@@ -17,7 +17,12 @@ fails, a rule-based draft is always available.
 - `rubrics.py` – reads the rubric workbook and pulls sub-rubric definitions and score bands
 - `llm.py` – writes the email with OpenAI gpt-4o-mini (default) or Claude, and checks the numbers it used
 - `templates/index.html` – the page
-- `google_apps_script/Code.gs` – the Google Apps Script that sends emails from Gmail and logs them in a Google Sheet (setup: `GOOGLE_SHEETS.md`)
+- `google_apps_script/Code.gs` – the Google Apps Script that sends emails (from Gmail, or from Outlook through Microsoft Graph) and logs them in a Google Sheet (setup: `GOOGLE_SHEETS.md`, `OUTLOOK.md`)
+- `bundle.py` – page 2: reads the daily BigQuery zip (or its CSVs), checks files, columns and dates
+- `manager_engine.py` – page 2: campus analysis, watchlists, instructor last-3-QA-day averages, Capability Managers and connects, month view
+- `daily_email.py`, `templates/daily_email.html` – page 2: the approved daily email (HTML + plain text)
+- `templates/manager.html` – page 2 (`/manager`)
+- `bigquery/` – the five BigQuery export queries and the daily scripts (see `bigquery/README.md`)
 - `rubrics/Updated_Rubrics_and_Scoring.xlsx` – the rubric workbook the AI uses
 - `capability_managers.xlsx` – capability manager names and emails (columns `Capability Manager Name`, `Capability Manager Email`). To change it, edit the file and push
 
@@ -45,6 +50,10 @@ fails, a rule-based draft is always available.
      institute, scores, sender_name, test, dry_run, force, repeat_days, secret}`; `to` and `cc` are
      `;`-separated. `SEND_API_TOKEN`, if set, goes in an `Authorization: Bearer` header (Power Automate).
      Until it's set, Send says sending isn't set up and Copy email still works
+   - `RESEND_API_KEY` – when set, emails are sent through Resend (`RESEND.md`) and the Google Sheet script
+     at `SEND_API_URL` is used only for the log and the repeat check. `RESEND_FROM` sets the sender (its
+     domain must be verified in Resend; default `onboarding@resend.dev`, which only delivers to the Resend
+     account's own address) and `RESEND_REPLY_TO` where replies go
    - `SEND_SECRET` – required for Google Sheets: the same value as the script's `SECRET` property
    - `SEND_REPEAT_DAYS` – optional, default `7`. A live email to an instructor already emailed (live) in
      this many days is refused by the script until it's confirmed on the page
@@ -52,9 +61,32 @@ fails, a rule-based draft is always available.
      `dry_run: true` and no email is sent (for testing the connection). In test mode every email
      goes only to `SEND_TEST_TO`, with no CC, `[TEST]` in the subject and a note of who it would have gone to
    - `SEND_TEST_TO` – the address(es) that receive emails in test mode (required for test mode only)
+   - `DAILY_TO` – page 2: who receives the daily email (QA leads, comma-separated). The Capability Managers in
+     `capability_managers.xlsx` are CC'd. It uses the same sender, `SEND_MODE` and Sent log as page 1
+   - `APP_URL` – optional: the app's address for the email's "Open the full analysis" button (defaults to the
+     address the page was opened from)
    - `APP_PASSWORD` – optional but recommended; the browser will ask for it (any username)
    - To use Claude instead: `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`; `ANTHROPIC_MODEL` is optional and defaults to `claude-haiku-5-5`
 5. Deploy and open the URL.
+
+## Page 2: Manager analysis (`/manager`)
+Every morning:
+1. Cloud Shell: `bash ~/bigquery/daily_cloudshell.sh` downloads `qa_exports_YYYYMMDD.zip` (5 CSVs).
+2. Open **Manager analysis** and drop the zip. The app checks the four page-2 files (columns, date ranges) and
+   shows the checks at the top. Nothing is stored.
+3. The report date defaults to the latest day in `qa_daily.csv` (yesterday); the month view to its month.
+   Changing either re-runs the analysis.
+4. Tabs: Act on these today · Campus analysis · Manager connect usage · Manager detail · Month view · Daily email.
+   Tables download as CSV.
+5. **Daily email**: Preview, Copy HTML (pastes with formatting into Outlook/Gmail) or Send. Send follows
+   `SEND_MODE` (dry run → test → live) and logs to the Sent log; a second live send for the same report date
+   asks for confirmation.
+6. Page 1 accepts the same zip (it uses `instructor_qa_last3_export.csv` inside it).
+
+Rules: averages are SUM(score_sum) ÷ SUM(scored) with their counts, never an average of averages; missing data
+shows as "no data", never 0. Connects on the report date are provisional, so managers are judged on the days
+before. Managers with fewer than 3 instructors are listed under the table. A score change after a connect is an
+association, not proof of effect.
 
 ## Run locally
 ```

@@ -7,3 +7,9 @@ rubrics/upload.tmp.xlsx
 *.zip
 *.csv
 capability_manager_names.xlsx
+# daily BigQuery exports and the analysis reference contain instructor names and emails
+exports/
+qa_exports/
+reference/
+bigquery/4_manager_activity.filled.sql
+*.mp4

@@ -769,7 +769,7 @@ class Engine:
                            f"{' elsewhere' if not sup else ''} ({escape(r['short'])}{rub})")
             items.append({"bold": f"Lecture: {head}.", "line": " · ".join(sup) + "."})
         else:
-            items.append({"bold": "Lecture: no campus is on the watchlist.",
+            items.append({"calm": True, "bold": "Lecture: no campus is on the watchlist.",
                           "line": "No campus fell beyond normal variation."})
         # 2. practice: the rubric that fell across campuses
         rows = [r for r in wl["practice"]["rows"] if r["status"] != "Removed today" and r["subject"]]
@@ -796,7 +796,7 @@ class Engine:
                 line = (line + " " if line else "") + " · ".join(rest) + "."
             items.append({"bold": head, "line": line})
         else:
-            items.append({"bold": "Practice: no campus is on the watchlist.",
+            items.append({"calm": True, "bold": "Practice: no campus is on the watchlist.",
                           "line": "No campus fell beyond normal variation."})
         # 3. idle campuses: only those without a known reason need a follow-up
         unknown = [r for r in idle if not r.get("reason")]
@@ -805,10 +805,10 @@ class Engine:
             items.append({"bold": f"No sessions and no known reason at {places}.",
                           "line": "Ask the campus why: exams, a holiday, or the schedule feed stopped."})
         elif idle:
-            items.append({"bold": "No campus needs a follow-up on sessions.",
+            items.append({"calm": True, "bold": "No campus needs a follow-up on sessions.",
                           "line": "Every campus without sessions has a known reason."})
         else:
-            items.append({"bold": f"Every campus held sessions on {fmt_day(Y)}.", "line": "No idle campuses."})
+            items.append({"calm": True, "bold": f"Every campus held sessions on {fmt_day(Y)}.", "line": "No idle campuses."})
         # 4. managers with no connects
         none_ = [r for r in cu["rows"] if r["group"] == "none"]
         rng = day_range(cu["from"], cu["to"])
@@ -825,7 +825,7 @@ class Engine:
                                else f"{who(r)}: check if connects are held outside the tool")
             items.append({"bold": head, "line": ". ".join(why) + "."})
         else:
-            items.append({"bold": f"Every Capability Manager recorded connects {rng}.", "line": ""})
+            items.append({"calm": True, "bold": f"Every Capability Manager recorded connects {rng}.", "line": ""})
         # 5. a full day of connects missed (settled days only)
         judged = cu["days"][:-1]
         worst = [(d["date"], r, d) for r in cu["rows"] for d in r["days"]
@@ -839,7 +839,7 @@ class Engine:
             items.append({"bold": f"Connects missed on {fmt_day(day)}: "
                           + ", ".join(f"{who(r)} {d['n']} of {d['n']}" for _, r, d in ws) + ".", "line": line})
         else:
-            items.append({"bold": "No manager missed a full day of connects.", "line": line})
+            items.append({"calm": True, "bold": "No manager missed a full day of connects.", "line": line})
         return items
 
     def focus(self, wl, cu) -> str:

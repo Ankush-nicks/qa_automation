@@ -216,7 +216,7 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
     <p>Use the daily <code>qa_exports_YYYYMMDD.zip</code> (its instructor file is used), or the CSV (or Excel) export with day-wise averages, <code>qa_reports_json</code> and <code>session_rubric_evidence_json</code> columns. Both lecture and practice sessions are counted.</p>
     <label class="btn" for="fileInput">Choose file</label>
     <input type="file" id="fileInput" accept=".csv,.xlsx,.xlsm,.zip,text/csv,application/zip">
-    <p class="fine">The file is processed on this server and isn’t stored. Only the selected instructor’s scores are sent to the AI when you write an email.</p>
+    <p class="fine" id="storeNote">The file is processed on this server and isn’t stored. Only the selected instructor’s scores are sent to the AI when you write an email.</p>
     <div class="err" id="err" role="alert"></div>
     <div class="loading hidden" id="loading" role="status" aria-live="polite">
       <span class="spin" aria-hidden="true"></span>
@@ -344,12 +344,13 @@ async function loadStatus(){
 
 let analyzeSeq=0;
 async function analyze(first){
-  if(!state.file) return;
+  if(!state.file && !state.useSaved) return;
   const seq=++analyzeSeq;
-  const fd=new FormData(); fd.append("export",state.file);
+  const sending=state.file;
+  const fd=new FormData(); if(sending) fd.append("export",sending);
   const S=settings(); if(first){ S.review=""; }
   fd.append("settings",JSON.stringify(S));
-  if(first){ $("drop").classList.remove("hidden"); $("app").classList.add("hidden"); $("err").style.display="none"; setLoading(true,state.file.name); }
+  if(first){ $("drop").classList.remove("hidden"); $("app").classList.add("hidden"); $("err").style.display="none"; setLoading(true,sending?sending.name:"the saved file"); }
   else { $("refreshing").classList.remove("hidden"); $("topbar").classList.remove("hidden"); }
   let j;
   try{
@@ -369,6 +370,13 @@ async function analyze(first){
     return;
   }
   state.data=j; state.prevFile=state.file;
+  if(j.db){
+    state.useSaved=true; state.file=null; state.prevFile=null;
+    if(sending&&j.saved){
+      const errs=(j.saved.errors||[]);
+      toast(errs.length?errs.join(" "):`Saved for both pages${j.saved.manager?"":" (page 1 only: this file has no page-2 data)"}.`);
+    }
+  }
   if(first) loadSentLog();
   if(first){
     $("sReview").value=j.settings.review;
@@ -379,12 +387,20 @@ async function analyze(first){
   const k=skey();
   j.instructors.forEach(x=>{ const d=state.drafts[x.id]; if(!d || (d.source==="rule" && !d.edited)) state.drafts[x.id]={source:"rule",subject:x.baseline.subject,body:x.baseline.body,edited:false,warnings:[],skey:k}; });
   $("err").style.display="none";
-  $("fileName").textContent=state.file.name;
+  $("fileName").textContent=j.file+(sending||!j.saved_file?"":` · saved ${new Date(j.saved_file.saved_at).toLocaleString()}`);
   $("filebar").classList.remove("hidden"); $("drop").classList.add("hidden"); $("app").classList.remove("hidden");
   render();
 }
 
 function handleFile(file){ if(!file) return; state.file=file; analyze(true); }
+
+// With the database set up, the page opens on the last saved file (from either page)
+fetch("/api/manager/saved").then(r=>r.json()).then(j=>{
+  if(!j.configured) return;
+  $("storeNote").textContent = j.error ? `The database isn’t reachable: ${j.error}`
+    : "Saved to the database: the daily zip uploaded here or on Manager analysis is used by both pages. Only the selected instructor’s scores are sent to the AI when you write an email.";
+  if(j.instructor_file && !state.file && !state.data){ state.useSaved=true; analyze(true); }
+}).catch(()=>{});
 
 const inst=id=>state.data.instructors.find(x=>x.id===id);
 function groups(){

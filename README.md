@@ -87,7 +87,8 @@ Every morning:
 5. **Daily email**: Preview, Copy HTML (pastes with formatting into Outlook/Gmail) or Send. Send follows
    `SEND_MODE` (dry run → test → live) and logs to the Sent log; a second live send for the same report date
    asks for confirmation.
-6. Page 1 accepts the same zip (it uses `instructor_qa_last3_export.csv` inside it).
+6. Page 1 accepts the same zip (it uses `instructor_qa_last3_export.csv` inside it). With Turso, one upload on
+   either page saves the data for both, and both open on the saved data.
 
 Rules: averages are SUM(score_sum) ÷ SUM(scored) with their counts, never an average of averages; missing data
 shows as "no data", never 0. Connects on the report date are provisional, so managers are judged on the days

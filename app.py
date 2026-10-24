@@ -6,10 +6,12 @@ from __future__ import annotations
 
 import base64
 import hmac
+import io
 import json
 import os
 import re
 import threading
+import zipfile
 from html import escape
 import urllib.error
 import urllib.parse
@@ -23,7 +25,8 @@ import pandas as pd
 import daily_email
 import llm
 import store as dbstore
-from bundle import BundleError, prepare, raw_frames, read_bundle, upload_export_date, instructor_file
+from bundle import (INSTRUCTOR_FILE, BundleError, collect, export_date, instructor_file, prepare, raw_frames,
+                    read_bundle, upload_export_date)
 from manager_engine import Engine
 from managers import load_managers, match_managers
 from qa_engine import analyze, read_export
@@ -131,13 +134,24 @@ def status():
 
 @app.post("/api/analyze")
 def api_analyze():
+    """Page 1. With the database set up, an uploaded file is saved (a zip also saves page 2's data),
+    and no file = the saved instructor file."""
     f = request.files.get("export")
-    if not f or not f.filename:
-        return jsonify(error="Choose the QA export file first."), 400
-    data = f.read()
+    uploaded = bool(f and f.filename)
+    if uploaded:
+        data, filename = f.read(), f.filename
+    else:
+        got = None
+        try:
+            got = STORE.get_file(INSTRUCTOR_KEY) if STORE else None
+        except dbstore.StoreError as e:
+            return jsonify(error=f"The saved file couldn’t be read from the database: {e}"), 502
+        if not got:
+            return jsonify(error="Choose the QA export file first."), 400
+        filename, data, _ = got
     try:
         S = parse_settings(json.loads(request.form.get("settings") or "{}"))
-        df = read_export(data, f.filename)
+        df = read_export(data, filename)
         out = analyze(df, S)
         mgrs = manager_map()
         rows = {str(r.get("instructor_user_id") or i): r for i, r in enumerate(df.to_dict(orient="records"))}
@@ -158,12 +172,17 @@ def api_analyze():
     except ValueError as e:
         roster = read_roster(data)  # the roster export dropped in the wrong box
         if roster is not None:
-            return jsonify(roster={**parse_roster(roster), "file": f.filename})
+            return jsonify(roster={**parse_roster(roster), "file": filename})
         return jsonify(error=str(e)), 400
     except Exception as e:  # noqa: BLE001
         app.logger.exception("analyze failed")
         return jsonify(error=f"The file was read, but something in it couldn’t be processed ({e})."), 400
-    out["file"] = f.filename
+    out["file"] = filename
+    out["db"] = bool(STORE)
+    if STORE and uploaded:
+        out["saved"] = _save_upload([(filename, data)])
+    elif STORE:
+        out["saved_file"] = STORE.file_info(INSTRUCTOR_KEY)
     return jsonify(out)
 
 
@@ -461,6 +480,35 @@ def _saved_bundle():
     return _saved["bundle"]
 
 
+INSTRUCTOR_KEY = "instructor_qa"
+
+
+def _save_upload(ups: list[tuple[str, bytes]], ingest: bool = True) -> dict:
+    """Saves what an upload holds for both pages: page 1's instructor file (from a zip, or the file
+    itself) and, from a zip, page 2's four files. Never fails the request: problems come back as text."""
+    out = {"instructor": None, "manager": None, "errors": []}
+    exp = upload_export_date(ups)
+    files = collect(ups)
+    try:
+        raw = instructor_file(files)
+        if raw is not None:
+            name = next((n for n, _ in ups if n.lower().endswith(".zip")), ups[0][0])
+            out["instructor"] = STORE.save_file(INSTRUCTOR_KEY, f"{name} › {INSTRUCTOR_FILE}", raw, exp)
+        elif len(ups) == 1 and not zipfile.is_zipfile(io.BytesIO(ups[0][1])):
+            out["instructor"] = STORE.save_file(INSTRUCTOR_KEY, ups[0][0], ups[0][1], exp)
+    except dbstore.StoreError as e:
+        out["errors"].append(f"Page 1’s file wasn’t saved: {e}")
+    if ingest:
+        try:
+            frames, _ = raw_frames(ups)
+            out["manager"] = STORE.ingest(frames, exp, ", ".join(n for n, _ in ups))
+        except BundleError:
+            pass  # not a page-2 export (e.g. page 1's CSV on its own)
+        except dbstore.StoreError as e:
+            out["errors"].append(f"Page 2’s data wasn’t saved: {e}")
+    return out
+
+
 @app.get("/api/manager/saved")
 def api_manager_saved():
     if not STORE:
@@ -469,7 +517,7 @@ def api_manager_saved():
         meta = STORE.meta()
         return jsonify(configured=True, has_data=bool(meta.get("version")), latest_qa=meta.get("latest_qa"),
                        cutoff=meta.get("cutoff"), updated_at=meta.get("updated_at"), keep_days=dbstore.keep_days(),
-                       uploads=STORE.uploads(10))
+                       uploads=STORE.uploads(10), instructor_file=STORE.file_info(INSTRUCTOR_KEY))
     except dbstore.StoreError as e:
         return jsonify(configured=True, has_data=False, error=str(e))
 
@@ -485,6 +533,7 @@ def api_manager_analyze():
             if ups:
                 raw, found = raw_frames(ups)
                 saved = STORE.ingest(raw, upload_export_date(ups), ", ".join(n for n, _ in ups))
+                saved["also"] = _save_upload(ups, ingest=False)
             b = _saved_bundle()
             if b is None:
                 raise BundleError("Nothing is saved yet. Upload today’s qa_exports_YYYYMMDD.zip.")

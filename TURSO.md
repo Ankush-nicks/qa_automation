@@ -1,7 +1,8 @@
-# Saving page 2's data in Turso
+# Saving the daily data in Turso (both pages)
 
-With a Turso database connected, the Manager analysis page saves every upload and opens on the saved
-data. You upload the daily zip once a day, and anyone opening the page sees the latest analysis.
+With a Turso database connected, both pages save every upload and open on the saved data. You upload
+the daily zip once a day, on either page, and anyone opening either page sees the latest data.
+Page 1 uses the zip's `instructor_qa_last3_export.csv` and page 2 uses the other four files.
 
 ## How the data is kept
 - **The upload overrides the days it covers.** The daily zip covers about 50 days. For QA, connects
@@ -15,6 +16,9 @@ data. You upload the daily zip once a day, and anyone opening the page sees the 
   connect" true.
 - **The manager map is replaced by each upload.** The exception is an export older than the saved one,
   which doesn't replace it.
+- **Page 1's file is saved whole** (gzipped, about 0.7 MB). Each upload replaces it, unless the
+  upload comes from an older export than the saved one. Uploading page 1's CSV on its own saves only
+  that file.
 - **Only changed rows are written.** Uploading the same zip twice writes nothing. A normal day writes a
   few thousand rows, which is well inside Turso's free plan.
 
@@ -38,7 +42,7 @@ for the full month view.
    - From then on, the page opens on the saved data.
 
 The app creates its tables on the first upload. The tables are `qa_daily`, `manager_map`,
-`manager_connects`, `manager_activity`, `meta` and `uploads` (a log of the last 60 uploads). You can browse
+`manager_connects`, `manager_activity`, `files` (page 1's file), `meta` and `uploads` (a log of the last 60 uploads). You can browse
 them in Turso's web console.
 
 To test locally without Turso, set `TURSO_DATABASE_URL` to a file path such as `qa.db`. A local SQLite

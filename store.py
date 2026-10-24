@@ -15,6 +15,7 @@ TURSO_AUTH_TOKEN = a database token (turso db tokens create <db>). Unset = nothi
 from __future__ import annotations
 
 import base64
+import gzip
 import hashlib
 import json
 import os
@@ -216,7 +217,8 @@ class Store:
         self.db = db
         self._ready = False
         self._lock = threading.Lock()
-        self._cache = None  # (version, frames, meta)
+        self._cache = None  # (version, frames)
+        self._files = {}    # key -> (saved_at, filename, bytes)
 
     # ---- schema
     def _setup(self):
@@ -226,6 +228,8 @@ class Store:
             "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)",
             "CREATE TABLE IF NOT EXISTS uploads (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT, file TEXT, "
             "export_date TEXT, qa_from TEXT, qa_to TEXT, added INTEGER, removed INTEGER, note TEXT)",
+            "CREATE TABLE IF NOT EXISTS files (key TEXT PRIMARY KEY, filename TEXT, export_date TEXT, "
+            "saved_at TEXT, size INTEGER, data BLOB)",
         ])
         self._ready = True
 
@@ -381,6 +385,41 @@ class Store:
             frames[t] = df.apply(lambda s: s.map(_text))
         self._cache = (meta["version"], frames)
         return frames, meta
+
+    # ---- whole files (page 1's instructor export): the newest upload replaces the saved one
+    def file_info(self, key: str) -> dict | None:
+        self._setup()
+        rows = self.db.query(f"SELECT filename, export_date, saved_at, size FROM files WHERE key = {_lit(key, False)}")
+        return dict(zip(["filename", "export_date", "saved_at", "size"], rows[0])) if rows else None
+
+    def save_file(self, key: str, filename: str, data: bytes, export_date: str | None) -> dict:
+        """Saves the file gzipped, unless the saved one comes from a newer export."""
+        info = self.file_info(key)
+        if info and info["export_date"] and export_date and export_date < info["export_date"]:
+            return {**info, "kept": True}
+        gz = gzip.compress(data, 6)
+        now = _now()
+        self.db.transaction([
+            "INSERT INTO files (key, filename, export_date, saved_at, size, data) VALUES ("
+            + ", ".join([_lit(key, False), _lit(filename, False), _lit(export_date or "", False), _lit(now, False),
+                         str(len(data)), f"X'{gz.hex()}'"]) + ") ON CONFLICT(key) DO UPDATE SET "
+            "filename = excluded.filename, export_date = excluded.export_date, saved_at = excluded.saved_at, "
+            "size = excluded.size, data = excluded.data"])
+        self._files[key] = (now, filename, data)
+        return {"filename": filename, "export_date": export_date or "", "saved_at": now, "size": len(data),
+                "kept": False}
+
+    def get_file(self, key: str) -> tuple[str, bytes, dict] | None:
+        """(filename, bytes, info) of the saved file; cached until a newer one is saved."""
+        info = self.file_info(key)
+        if not info:
+            return None
+        c = self._files.get(key)
+        if not c or c[0] != info["saved_at"]:
+            blob = self.db.query(f"SELECT data FROM files WHERE key = {_lit(key, False)}")[0][0]
+            c = (info["saved_at"], info["filename"], gzip.decompress(blob))
+            self._files[key] = c
+        return c[1], c[2], info
 
     def uploads(self, n: int = 10) -> list[dict]:
         self._setup()

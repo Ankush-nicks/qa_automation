@@ -662,8 +662,11 @@ class Engine:
                          "prev": r2(self.avg(p)), "prev_n": int(p.scored.sum())})
         subj = [r for r in subj if r["n"]]
         subj.sort(key=lambda r: -r["n"])
+        # the watchlist needs 28 days of QA before a day; earlier days can't be checked
+        watch_from = max(ms, self.first_date + 27 * DAY)
         return {"from": d_str(ms), "to": d_str(end), "network": net, "watchlist": wl, "managers": mgr_days,
-                "subjects": subj, "prev_from": d_str(ms - span * DAY), "prev_to": d_str(ms - DAY)}
+                "subjects": subj, "prev_from": d_str(ms - span * DAY), "prev_to": d_str(ms - DAY),
+                "watch_from": d_str(watch_from), "data_from": d_str(self.first_date)}
 
     # ----------------------------------------------------- notes and items
     @staticmethod

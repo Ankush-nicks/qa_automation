@@ -183,6 +183,7 @@ td.mark{width:28px;padding-right:0}
 /* charts */
 .chart{position:relative}
 .chart svg{display:block;width:100%;height:auto;overflow:visible}
+@media (max-width:700px){.chart{overflow-x:auto}.chart svg{min-width:680px}}
 .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--muted);margin:4px 0 6px}
 .legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
 .legend i.sq{height:10px;width:10px;border-radius:2px}
@@ -485,8 +486,11 @@ function vMonth(el) {
     `<td class="num">${r.days.length ? r.days[r.days.length - 1].waiting : 0}</td></tr>`);
   const srows = M.subjects.filter((s, i) => showAllSubj || i < 25).map(s => `<tr><td>${esc(s.subject)}</td><td>${s.type}</td><td class="num">${n2(s.avg)}</td><td class="num">${n2(s.prev)}</td><td class="num">${s.n.toLocaleString()}</td><td class="num">${s.prev_n.toLocaleString()}</td><td class="num">${s.campuses}</td></tr>`);
   el.innerHTML = `<div class="panel"><h2 class="sec">Month view — ${day(M.from)} to ${day(M.to)}</h2>
-    <h3>Network daily average</h3><div class="legend"><span><i style="background:var(--s1)"></i>Lecture</span><span><i style="background:var(--s2)"></i>Practice</span></div><div class="chart" id="cAvg"></div>
-    <h3>QA coverage, lecture + practice</h3><div class="chart" id="cCov"></div>${dlBtn(null, "network_daily", "net")}</div>
+    <h3>Average QA score per day, all campuses</h3>
+    <p class="note">Each point is the average of every QA evaluation that day, out of 10, with lectures and practice drawn separately. Gaps are days without sessions (Sundays). Hollow points had fewer than 50 evaluations, so a handful of reviews decide them; they aren't joined to the line.</p>
+    <div class="legend"><span><i style="background:var(--s1)"></i>Lecture</span><span><i style="background:var(--s2)"></i>Practice</span></div><div class="chart" id="cAvg"></div>
+    <h3>Share of sessions with a QA report, per day</h3>
+    <p class="note">Lecture and practice sessions with a completed QA report ÷ sessions scheduled that day. Hollow points had fewer than 50 sessions.</p><div class="chart" id="cCov"></div>${dlBtn(null, "network_daily", "net")}</div>
     <div class="panel"><h2 class="sec">Watchlist history</h2><p class="note">Red = on the watchlist that day (rolling 14 days vs the 14 before).</p>
     <h3>Lectures${dlBtn(null, "watchlist_lecture", "wl-lecture")}</h3>${wlGrid("lecture")}<h3>Practice${dlBtn(null, "watchlist_practice", "wl-practice")}</h3>${wlGrid("practice")}</div>
     <div class="panel"><h2 class="sec">Capability Managers × day</h2><p class="note">Connects completed each day (hover for completion rate and bottom-quarter instructors still waiting for a connect). Last column: bottom-quarter instructors not connected in 14 days, on ${day(M.to)}.</p>
@@ -495,8 +499,8 @@ function vMonth(el) {
     ${dlBtn("t-subj","subjects")}${table([["Subject"],["Type"],["Average","num"],["Before","num"],["Evals","num"],["Evals before","num"],["Campuses","num"]], srows, "t-subj")}
     ${M.subjects.length > 25 ? `<p class="note">${showAllSubj ? `All ${M.subjects.length} subjects.` : `The 25 with the most evaluations, of ${M.subjects.length}.`} <button class="btn ghost small" id="subjAll">${showAllSubj ? "Show top 25" : "Show all"}</button></p>` : ""}</div>`;
   const sa = $("#subjAll"); if (sa) sa.onclick = () => { showAllSubj = !showAllSubj; render(); };
-  lineChart($("#cAvg"), days, [{k: "lecture", n: "n_lecture", label: "Lecture", color: "var(--s1)"}, {k: "practice", n: "n_practice", label: "Practice", color: "var(--s2)"}], M.network, {fmt: v => v.toFixed(2)});
-  lineChart($("#cCov"), days, [{k: "coverage", n: "sessions", label: "Coverage", color: "var(--s1)"}], M.network, {fmt: v => v + "%", min: 0, max: 100, count: "sessions"});
+  lineChart($("#cAvg"), days, [{k: "lecture", n: "n_lecture", label: "Lecture", color: "var(--s1)"}, {k: "practice", n: "n_practice", label: "Practice", color: "var(--s2)"}], M.network, {fmt: v => v.toFixed(2), minN: 50});
+  lineChart($("#cCov"), days, [{k: "coverage", n: "sessions", label: "Coverage", color: "var(--s1)"}], M.network, {fmt: v => v + "%", min: 0, max: 100, count: "sessions", minN: 50});
 }
 
 // 6. Daily email
@@ -546,7 +550,8 @@ async function sendDaily(force) {
 
 // ------------------------------------------------------------------ charts
 function lineChart(el, days, series, rows, o = {}) {
-  const W = 960, H = 240, L = 44, R = 16, T = 12, B = 26;
+  const W = 960, H = 240, L = 44, R = 96, T = 12, B = 26, minN = o.minN || 0;
+  const thin = (r, s) => minN && (r[s.n] || 0) < minN;
   const vals = series.flatMap(s => rows.map(r => r[s.k]).filter(v => v != null));
   if (!vals.length) { el.innerHTML = '<p class="note">No data in this month.</p>'; return; }
   let lo = o.min ?? Math.floor(Math.min(...vals) - 0.3), hi = o.max ?? Math.ceil(Math.max(...vals) + 0.3);
@@ -558,13 +563,25 @@ function lineChart(el, days, series, rows, o = {}) {
   let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(series.map(s => s.label).join(" and "))} by day">`;
   svg += ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${o.min === 0 ? v + "%" : v}</text>`).join("");
   days.forEach((d, i) => { if (i % Math.ceil(days.length / 12) === 0 || i === days.length - 1) svg += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--muted)">${dt(d).getDate()} ${MON[dt(d).getMonth()]}</text>`; });
+  const ends = [];
   for (const s of series) {
     let path = "", pen = false;
-    rows.forEach((r, i) => { const v = r[s.k]; if (v == null) { pen = false; return; } path += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); pen = true; });
+    // days with few evaluations are drawn as hollow points, not joined, so they can't fake a jump
+    rows.forEach((r, i) => { const v = r[s.k]; if (v == null || thin(r, s)) { pen = false; return; } path += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); pen = true; });
     svg += `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
-    const li = rows.map(r => r[s.k]).lastIndexOf(rows.map(r => r[s.k]).filter(v => v != null).slice(-1)[0]);
-    if (li >= 0) svg += `<circle cx="${x(li)}" cy="${y(rows[li][s.k])}" r="4" fill="${s.color}" stroke="var(--surface)" stroke-width="2"/>`;
+    rows.forEach((r, i) => { if (r[s.k] != null && thin(r, s)) svg += `<circle cx="${x(i)}" cy="${y(r[s.k])}" r="4" fill="var(--surface)" stroke="${s.color}" stroke-width="2"/>`; });
+    // a day on its own between gaps has no line to sit on: give it a small dot
+    const solid = i => i >= 0 && i < rows.length && rows[i][s.k] != null && !thin(rows[i], s);
+    rows.forEach((r, i) => { if (solid(i) && !solid(i - 1) && !solid(i + 1)) svg += `<circle cx="${x(i)}" cy="${y(r[s.k])}" r="3" fill="${s.color}"/>`; });
+    let li = -1; rows.forEach((r, i) => { if (r[s.k] != null && !thin(r, s)) li = i; });
+    if (li >= 0) {
+      svg += `<circle cx="${x(li)}" cy="${y(rows[li][s.k])}" r="4" fill="${s.color}" stroke="var(--surface)" stroke-width="2"/>`;
+      ends.push({y: y(rows[li][s.k]), x: x(li), text: `${s.label} ${o.fmt(rows[li][s.k])}`});
+    }
   }
+  // direct labels at the end of each line, nudged apart when close
+  ends.sort((a, b) => a.y - b.y).forEach((e, i, arr) => { if (i && e.y - arr[i - 1].y < 14) e.y = arr[i - 1].y + 14; });
+  if (series.length > 1) ends.forEach(e => { svg += `<text x="${e.x + 10}" y="${e.y + 4}" font-size="12" fill="var(--ink)">${esc(e.text)}</text>`; });
   svg += `<line id="xh" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" opacity="0"/>`;
   svg += `<rect x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent" class="hit"/></svg><div class="tip"></div>`;
   el.innerHTML = svg;

@@ -462,6 +462,7 @@ try:
 except dbstore.StoreError as e:
     STORE, STORE_ERROR = None, str(e)
 _saved = {"version": None, "bundle": None}
+_answers: dict = {}  # finished page-2 answers for the saved data, by (version, date, month, host)
 
 
 def _saved_bundle():
@@ -527,9 +528,11 @@ def api_manager_analyze():
     """The zip (or the four CSVs) -> everything page 2 shows, plus the daily email. With the database
     set up, an upload is saved first and the analysis runs on the saved data; no upload = saved data."""
     saved = None
+    reasons = {}
     try:
         ups = [(f.filename, f.read()) for f in request.files.getlist("files") if f and f.filename]
         if STORE:
+            reasons = STORE.reasons()
             if ups:
                 raw, found = raw_frames(ups)
                 saved = STORE.ingest(raw, upload_export_date(ups), ", ".join(n for n, _ in ups))
@@ -539,12 +542,18 @@ def api_manager_analyze():
                 raise BundleError("Nothing is saved yet. Upload today’s qa_exports_YYYYMMDD.zip.")
             if ups:
                 b = {**b, "has_instructor_file": instructor_file(found) is not None}
+            else:
+                key = (_saved["version"], request.form.get("report_date") or "", request.form.get("month") or "",
+                       request.host_url, json.dumps(reasons, sort_keys=True))
+                if key in _answers:
+                    return Response(_answers[key], mimetype="application/json")
         else:
             if not ups:
                 raise BundleError("Choose the daily qa_exports_YYYYMMDD.zip first.")
             b = read_bundle(ups)
         eng = Engine({k: v.copy() for k, v in b["frames"].items()}, manager_map())
-        out = eng.analyze(request.form.get("report_date") or None, request.form.get("month") or None)
+        out = eng.analyze(request.form.get("report_date") or None, request.form.get("month") or None,
+                          reasons=reasons)
     except (BundleError, ValueError) as e:
         return jsonify(error=str(e), saved=saved), 400
     except dbstore.StoreError as e:
@@ -564,7 +573,49 @@ def api_manager_analyze():
                      "has_instructor_file": b["has_instructor_file"]}
     out["saved"] = saved
     out["db"] = bool(STORE)
-    return Response(json.dumps(_clean(out), ensure_ascii=False), mimetype="application/json")
+    out["reason_options"] = REASONS if STORE else []
+    body = json.dumps(_clean(out), ensure_ascii=False)
+    if STORE and not ups:
+        # opening the page again (or switching back to it) is instant until the next upload
+        if len(_answers) >= 12 or any(k[0] != _saved["version"] for k in _answers):
+            _answers.clear()
+        _answers[key] = body
+    return Response(body, mimetype="application/json")
+
+
+REASONS = ["Exams", "Holiday", "Break / vacation", "Event", "Other"]
+
+
+@app.post("/api/manager/reason")
+def api_manager_reason():
+    """Marks why a campus has no sessions (or clears it with an empty reason). The reason is tied to
+    the campus's last session, so it stops applying by itself once sessions resume."""
+    if not STORE:
+        return jsonify(error="Reasons need the database (TURSO_DATABASE_URL)."), 400
+    p = request.get_json(silent=True) or {}
+    campus, reason = str(p.get("campus") or "").strip(), str(p.get("reason") or "").strip()
+    note = str(p.get("note") or "").strip()[:200]
+    try:
+        if not reason:
+            STORE.clear_reason(campus)
+            return jsonify(ok=True, cleared=True)
+        if reason not in REASONS:
+            return jsonify(error=f"Unknown reason {reason!r}."), 400
+        b = _saved_bundle()
+        if b is None:
+            return jsonify(error="Nothing is saved yet."), 400
+        q = b["frames"]["qa_daily"]
+        Y = pd.Timestamp(p.get("report_date")) if p.get("report_date") else q.session_date.max()
+        mine = q[(q.campus_name == campus) & (q.session_date <= Y)]
+        if not len(mine) and campus not in set(q.campus_name):
+            return jsonify(error=f"{campus} isn’t in the saved data."), 400
+        if (mine.session_date == Y).any():
+            return jsonify(error=f"{campus} had sessions on {Y:%d %b}, so it needs no reason."), 400
+        last = mine.session_date.max()
+        STORE.set_reason(campus, reason, note, f"{last:%Y-%m-%d}" if len(mine) else None, f"{Y:%Y-%m-%d}")
+    except dbstore.StoreError as e:
+        return jsonify(error=f"The database step failed: {e}"), 502
+    return jsonify(ok=True)
 
 
 @app.post("/api/manager/send")

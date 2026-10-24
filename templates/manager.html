@@ -91,6 +91,11 @@ tr:last-child td{border-bottom:0}
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .bad{color:var(--low);font-weight:700}
 .dim{color:var(--muted)}
+tr.known td{color:var(--muted)}
+.reason{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.reason select,.reason input{padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);font-size:13px}
+.reason input{width:14em;max-width:100%}
+.reason select.unknown{border-color:var(--low);color:var(--low)}
 .pill{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;padding:1px 8px;white-space:nowrap}
 .pill.red{background:var(--low-bg);color:var(--low)} .pill.orange{background:var(--orange-bg);color:var(--orange)}
 .pill.amber{background:var(--mid-bg);color:var(--mid)} .pill.green{background:var(--ok-bg);color:var(--ok)}
@@ -146,14 +151,14 @@ iframe.preview{width:100%;height:900px;border:1px solid var(--line);border-radiu
   </header>
 
   <section class="drop" id="drop">
-    <div id="dropIdle">
+    <div id="dropIdle" class="hidden">
       <h2>Drop today’s qa_exports zip here</h2>
       <p>The <code>qa_exports_YYYYMMDD.zip</code> from <code>bash ~/bigquery/daily_cloudshell.sh</code>. You can also choose the four CSVs (qa_daily, manager_map, manager_connects, manager_activity) together.</p>
       <label class="btn" for="fileInput">Choose file</label>
       <input type="file" id="fileInput" accept=".zip,.csv,application/zip,text/csv" multiple>
       <p class="fine" id="storeNote">Processed on this server in memory and not stored. Contains instructor names: internal use only.</p>
     </div>
-    <div class="loading hidden" id="dropBusy" role="status" aria-live="polite"><span class="spin" aria-hidden="true"></span><b id="busyText">Reading the export and building the analysis…</b><span class="dim">This takes a few seconds.</span></div>
+    <div class="loading" id="dropBusy" role="status" aria-live="polite"><span class="spin" aria-hidden="true"></span><b id="busyText">Loading…</b><span class="dim">This takes a few seconds.</span></div>
     <div class="err hidden" id="err" role="alert"></div>
   </section>
 
@@ -237,15 +242,18 @@ drop.addEventListener("drop", e => takeFiles(e.dataTransfer.files));
 $("#date").addEventListener("change", () => run(false));
 $("#month").addEventListener("change", () => run(false));
 
+// The page starts on "Loading…" and shows the upload box only when nothing is saved
+function showUpload() { if (!D && !files) { $("#dropBusy").classList.add("hidden"); $("#dropIdle").classList.remove("hidden"); } }
 fetch("/api/manager/saved").then(r => r.json()).then(j => {
   saved = j;
+  if (!(j.configured && j.has_data && !j.error)) showUpload();
   if (!j.configured) { if (j.error) $("#storeNote").textContent = `Saving is off: ${j.error} Check the Turso settings in Render.`; return; }
   $("#replaceLbl").textContent = "Upload new zip";
   $("#fileName").textContent = "Saved data";
   $("#storeNote").textContent = j.error ? `The database isn’t reachable: ${j.error}`
     : `Saved to the database: each upload replaces the days it covers, and only the last ${j.keep_days} days are kept. Contains instructor names: internal use only.`;
-  if (j.has_data && !files) run(true);
-}).catch(() => {});
+  if (j.has_data && !j.error && !files) run(true);
+}).catch(showUpload);
 
 fetch("/api/status").then(r => r.json()).then(j => {
   sendCfg = j.send || null;
@@ -272,6 +280,23 @@ function render() {
 const table = (heads, rows, id) => `<div class="tbl"${id ? ` id="${id}"` : ""}><table><thead><tr>${heads.map(h => `<th class="${h[1] || ""}">${h[0]}</th>`).join("")}</tr></thead><tbody>${rows.join("") || `<tr><td colspan="${heads.length}" class="dim">Nothing to show.</td></tr>`}</tbody></table></div>`;
 const pill = (t, c) => `<span class="pill ${c}">${esc(t)}</span>`;
 
+// campus reasons: saved to the database, then the analysis re-runs
+async function saveReason(box) {
+  const sel = box.querySelector("select"), note = box.querySelector("input");
+  try {
+    const r = await fetch("/api/manager/reason", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({campus: box.dataset.campus, reason: sel.value, note: sel.value ? note.value : "", report_date: D.report_date})});
+    const j = await r.json().catch(() => ({error: `The server answered ${r.status}.`}));
+    if (!r.ok || j.error) throw new Error(j.error);
+    toast(sel.value ? `${box.dataset.campus}: ${sel.value}. Left out of the email.` : `${box.dataset.campus}: reason cleared. It’s a follow-up again.`);
+    await run(false);
+  } catch (e) { toast("Couldn’t save the reason: " + e.message, 6000); }
+}
+document.addEventListener("change", e => {
+  const box = e.target.closest && e.target.closest(".reason");
+  if (box) saveReason(box);
+});
+
 // 1. Act on these today
 function vAct(el) {
   el.innerHTML = `<div class="panel"><h2 class="sec">Act on these today</h2><p class="note">Built from the tabs below. Same five items as the daily email.</p>
@@ -280,8 +305,14 @@ function vAct(el) {
 
 // 2. Campus analysis
 function vCampus(el) {
-  const idle = table([["Campus"],["Last session (any type)"],["Without sessions","num"]],
-    D.idle.map(r => `<tr><td>${esc(r.short)}</td><td>${day(r.last)}</td><td class="num">${r.days == null ? "no data" : r.days + " days"}</td></tr>`), "t-idle");
+  const opts = D.reason_options || [];
+  const reasonCell = r => !opts.length ? `<span class="dim">needs the database</span>` :
+    `<div class="reason" data-campus="${esc(r.campus)}"><select aria-label="Why ${esc(r.short)} has no sessions" class="${r.reason ? "" : "unknown"}">
+      <option value="">Unknown — follow up</option>${opts.map(o => `<option${o === r.reason ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>
+      <input type="text" placeholder="Note (optional)" value="${esc(r.reason_note || "")}" aria-label="Note for ${esc(r.short)}"${r.reason ? "" : " hidden"}></div>`;
+  const idle = table([["Campus"],["Last session (any type)"],["Without sessions","num"],["Reason"]],
+    D.idle.map(r => `<tr class="${r.reason ? "known" : ""}"><td>${r.reason ? esc(r.short) : `<b>${esc(r.short)}</b>`}</td><td>${day(r.last)}</td><td class="num">${r.days == null ? "no data" : r.days + " days"}</td><td>${reasonCell(r)}</td></tr>`), "t-idle");
+  const nKnown = D.idle.filter(r => r.reason).length;
   const cov = table([["Campus"],["Sessions","num"],["With QA","num"],["Yesterday","num"],["Usual (27 days)","num"],["Note"]],
     D.coverage.map(r => `<tr><td>${esc(r.short)}</td><td class="num">${r.sessions}</td><td class="num">${r.with_qa}</td><td class="num">${r.below ? `<span class="bad">${r.pct}%</span>` : r.pct + "%"}</td><td class="num dim">${pct(r.usual)}</td><td>${esc(r.note)}</td></tr>`), "t-cov");
   const wl = t => {
@@ -301,7 +332,8 @@ function vCampus(el) {
       table([["Campus + status"],["Campus gap (prev 14d → last 14d)","num"],["Subject most affected"],["Subject avg vs other campuses","num"],["Rubric that fell most"]], rows, "t-wl-" + t) + close;
   };
   el.innerHTML = `<div class="panel"><h2 class="sec">Campus analysis — ${wday(D.report_date)}</h2>
-    <h3>No sessions on ${day(D.report_date)} — ${D.idle.length}${dlBtn("t-idle","idle_campuses")}</h3>${idle}
+    <h3>No sessions on ${day(D.report_date)} — ${D.idle.length}${nKnown ? ` <span class="dim">(${nKnown} with a known reason)</span>` : ""}${dlBtn("t-idle","idle_campuses")}</h3>${idle}
+    ${opts.length ? `<p class="note">Mark why a campus has no sessions. A campus with a reason is left out of the daily email and of “Act on these today”; the reason clears itself once the campus has sessions again. Unknown ones stay as follow-ups.</p>` : ""}
     <h3>QA coverage — lowest five${dlBtn("t-cov","qa_coverage")}</h3>${cov}
     <p class="note">Coverage = sessions with a completed report ÷ sessions scheduled (lecture + practice). Usual = the campus’s previous 27 days.</p></div>
     <div class="panel"><h2 class="sec">Watchlist — campuses losing ground against the same subjects elsewhere</h2>

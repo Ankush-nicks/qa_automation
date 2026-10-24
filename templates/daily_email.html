@@ -41,7 +41,7 @@
 {% for r in idle %}<tr><td style="{{ TD }}">{{ r.short }}</td><td style="{{ TD }}">{{ r.last_day or "no data" }}</td><td style="{{ TD }}">{{ r.nth or "no data" }}</td></tr>{% endfor %}
 </table>
 {% if idle_note %}<div style="font-size:12px;color:#52606d;margin-top:6px;line-height:1.45;"><b>Action:</b> {{ idle_note|safe }}</div>{% endif %}
-{% else %}<div style="font-size:12.5px;color:#52606d;">Every campus held sessions.</div>{% endif %}
+{% else %}<div style="font-size:12.5px;color:#52606d;">{% if idle_known %}No campus needs a follow-up: every campus without sessions has a known reason.{% else %}Every campus held sessions.{% endif %}</div>{% endif %}
 
 <div style="font-size:14px;font-weight:bold;margin:16px 0 6px;">2. QA coverage yesterday — lowest five</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:12.5px;">

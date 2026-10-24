@@ -798,16 +798,15 @@ class Engine:
         else:
             items.append({"bold": "Practice: no campus is on the watchlist.",
                           "line": "No campus fell beyond normal variation."})
-        # 3. idle campuses
-        long_idle = [r for r in idle if (r["days"] or 0) >= 3]
-        if long_idle:
-            lo, hi = min(r["days"] for r in long_idle), max(r["days"] for r in long_idle)
-            span = f"{lo}–{hi}" if lo != hi else f"{hi}"
-            items.append({"bold": f"No sessions for {span} days at " + ", ".join(escape(r["short"]) for r in long_idle) + ".",
-                          "line": "Confirm break or schedule feed stopped."})
+        # 3. idle campuses: only those without a known reason need a follow-up
+        unknown = [r for r in idle if not r.get("reason")]
+        if unknown:
+            places = ", ".join(escape(r["short"]) + (f" ({nth(r['days'])} day)" if r["days"] else "") for r in unknown)
+            items.append({"bold": f"No sessions and no known reason at {places}.",
+                          "line": "Ask the campus why: exams, a holiday, or the schedule feed stopped."})
         elif idle:
-            items.append({"bold": f"No sessions on {fmt_day(Y)} at " + ", ".join(escape(r["short"]) for r in idle) + ".",
-                          "line": "Short gaps (under 3 days)."})
+            items.append({"bold": "No campus needs a follow-up on sessions.",
+                          "line": "Every campus without sessions has a known reason."})
         else:
             items.append({"bold": f"Every campus held sessions on {fmt_day(Y)}.", "line": "No idle campuses."})
         # 4. managers with no connects
@@ -879,7 +878,18 @@ class Engine:
         return out
 
     # ------------------------------------------------------------- analyze
-    def analyze(self, Y=None, month=None, manager=None) -> dict:
+    @staticmethod
+    def apply_reasons(idle: list[dict], reasons: dict | None) -> list[dict]:
+        """A reason covers one quiet stretch: it applies while the campus's last session is still the
+        one it had when the reason was set, so it clears itself once sessions resume."""
+        for r in idle:
+            x = (reasons or {}).get(r["campus"])
+            if x and x.get("last_session") == r["last"]:
+                r["reason"], r["reason_note"] = x.get("reason"), x.get("note") or ""
+        idle.sort(key=lambda r: (bool(r.get("reason")), -(r["days"] or 0)))
+        return idle
+
+    def analyze(self, Y=None, month=None, manager=None, reasons=None) -> dict:
         Y = pd.Timestamp(Y) if Y else self.last_date
         if Y > self.last_date:
             raise ValueError(f"The report date can’t be after {fmt_day(self.last_date)}, the latest day in the QA file.")
@@ -889,7 +899,7 @@ class Engine:
         ms = pd.Timestamp(month + "-01") if month else Y.replace(day=1)
         if ms > Y:
             ms = Y.replace(day=1)
-        idle = self.idle(Y)
+        idle = self.apply_reasons(self.idle(Y), reasons)
         wl = self.watchlist(Y)
         cu = self.connect_usage(Y)
         for r in cu["rows"]:

@@ -34,14 +34,12 @@ def subject(a: dict) -> str:
 
 
 def _idle_note(idle: list[dict]) -> str:
-    long_ = [r for r in idle if (r["days"] or 0) >= 3]
-    if not long_:
+    """idle = the campuses without a known reason (the email leaves the others out)."""
+    if not idle:
         return ""
-    lo, hi = min(r["days"] for r in long_), max(r["days"] for r in long_)
-    when = f"{nth(lo)}–{nth(hi)} day" if lo != hi else f"{nth(hi)} day"
-    n = len(long_)
-    return (f"{_word(n).capitalize()} campus{'es are' if n > 1 else ' is'} on {'their' if n > 1 else 'its'} {when} with "
-            "nothing scheduled — confirm whether this is a break or the schedule feed stopped.")
+    n = len(idle)
+    return (f"{_word(n).capitalize()} campus{'es have' if n > 1 else ' has'} no sessions and no known reason — "
+            "confirm with the campus whether it’s exams, a holiday, or the schedule feed stopped.")
 
 
 def _coverage_note(h: dict, cov: list[dict]) -> str:
@@ -124,7 +122,8 @@ def context(a: dict, link: str, preview: bool = True, sent_time: str | None = No
     h = a["headline"]
     cu = a["connects"]
     idle = [dict(r, last_day=fmt_day(r["last"]) if r["last"] else None,
-                 nth=f"{nth(r['days'])} day" if r["days"] is not None else None) for r in a["idle"]]
+                 nth=f"{nth(r['days'])} day" if r["days"] is not None else None) for r in a["idle"]
+            if not r.get("reason")]  # campuses with a known reason (exams, holiday...) are left out
     cov = [dict(r, note_html=escape(r["note"]).replace("below usual", "<b>below usual</b>")) for r in a["coverage"]]
     mgrs = []
     for r in cu["rows"]:
@@ -138,7 +137,7 @@ def context(a: dict, link: str, preview: bool = True, sent_time: str | None = No
         "preview": preview, "sent_time": sent_time, "subject": subject(a), "h": h,
         "net_range": day_range(h["net14"]["from"], h["net14"]["to"]),
         "act": a["act"], "report_day": fmt_wday(a["report_date"]),
-        "idle": idle, "idle_note": _idle_note(a["idle"]),
+        "idle": idle, "idle_note": _idle_note(idle), "idle_known": len(a["idle"]) - len(idle),
         "coverage": cov, "coverage_note": _coverage_note(h, a["coverage"]),
         "watch": [dict(a["watchlist"][t], title=title) for t, title in (("lecture", "Lectures"), ("practice", "Practice"))],
         "watch_note": _watch_note(a["watchlist"]),

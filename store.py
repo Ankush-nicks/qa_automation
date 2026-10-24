@@ -231,6 +231,8 @@ class Store:
             "export_date TEXT, qa_from TEXT, qa_to TEXT, added INTEGER, removed INTEGER, note TEXT)",
             "CREATE TABLE IF NOT EXISTS files (key TEXT PRIMARY KEY, filename TEXT, export_date TEXT, "
             "saved_at TEXT, size INTEGER, data BLOB)",
+            "CREATE TABLE IF NOT EXISTS campus_reasons (campus TEXT PRIMARY KEY, reason TEXT, note TEXT, "
+            "last_session TEXT, set_on TEXT, set_at TEXT)",
         ])
         self._ready = True
 
@@ -421,6 +423,25 @@ class Store:
             c = (info["saved_at"], info["filename"], gzip.decompress(blob))
             self._files[key] = c
         return c[1], c[2], info
+
+    # ---- why a campus has no sessions (page 2): one row per campus, for its current quiet stretch
+    def reasons(self) -> dict:
+        self._setup()
+        rows = self.db.query("SELECT campus, reason, note, last_session, set_on, set_at FROM campus_reasons")
+        keys = ["reason", "note", "last_session", "set_on", "set_at"]
+        return {r[0]: dict(zip(keys, r[1:])) for r in rows}
+
+    def set_reason(self, campus: str, reason: str, note: str, last_session: str, set_on: str):
+        self._setup()
+        self.db.transaction([
+            "INSERT INTO campus_reasons (campus, reason, note, last_session, set_on, set_at) VALUES ("
+            + ", ".join(_lit(v, False) for v in (campus, reason, note, last_session, set_on, _now()))
+            + ") ON CONFLICT(campus) DO UPDATE SET reason = excluded.reason, note = excluded.note, "
+            "last_session = excluded.last_session, set_on = excluded.set_on, set_at = excluded.set_at"])
+
+    def clear_reason(self, campus: str):
+        self._setup()
+        self.db.transaction([f"DELETE FROM campus_reasons WHERE campus = {_lit(campus, False)}"])
 
     def uploads(self, n: int = 10) -> list[dict]:
         self._setup()

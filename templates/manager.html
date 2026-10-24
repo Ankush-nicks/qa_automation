@@ -146,6 +146,7 @@ th{color:var(--muted);font-weight:500;font-size:12.5px;border-bottom:1px solid v
 tr:last-child td{border-bottom:0}
 td.num,th.num{text-align:right;white-space:nowrap}
 .bad{color:var(--red);font-weight:600}
+.warnt{color:var(--amber);font-weight:600}
 .dim{color:var(--muted)}
 tr.known td{color:var(--muted)}
 tr.noteline td{border-top:0;padding-top:0;color:var(--muted);font-size:13px}
@@ -377,6 +378,9 @@ document.addEventListener("change", e => {
   if (box) saveReason(box);
 });
 
+// a campus with no sessions on the report date (from the idle list), or null
+const idleOf = campus => (D.idle || []).find(x => x.campus === campus) || null;
+
 // 1. Act on these today
 function vAct(el) {
   el.innerHTML = `<div class="panel"><h2 class="sec">Act on these today</h2><p class="note">Drawn from the other tabs; the same items open the daily email.</p>
@@ -400,7 +404,9 @@ function vCampus(el) {
     const w = D.watchlist[t];
     const rows = w.rows.map(r => {
       const s = r.subject;
-      const st = pill(r.status, r.status === "New today" ? "red" : r.status === "Still on list" ? "orange" : "grey");
+      const idl = idleOf(r.campus);
+      const st = pill(r.status, r.status === "New today" ? "red" : r.status === "Still on list" ? "orange" : "grey")
+        + (idl ? `<br><span class="dim">No sessions since ${day(idl.last)}: listed on older sessions</span>` : "");
       if (!s) return `<tr><td><b>${esc(r.short)}</b><br>${st}</td><td class="num">${sg(r.gap_p)} → <span class="bad">${sg(r.gap)}</span></td><td colspan="3" class="dim">${r.status === "Removed today" ? "Back within normal variation (not yet a recovery)" : "no data"}</td></tr>`;
       const rub = s.rubrics.length ? s.rubrics.map(x => `${esc(x.name)} ${n2(x.before)} → <span class="bad">${n2(x.now)}</span> <span class="dim">(others ${n2(x.others)})</span>`).join("<br>")
         : `<span class="dim">${s.no_rubric ? "No rubric scores for this subject" : "No rubric fell"}</span>`;
@@ -488,8 +494,10 @@ function vMonth(el) {
     const head = `Days on the list in ${MON[dt(M.from).getMonth()]}` + (M.watch_from > M.from ? ` (of ${checked} checked)` : "");
     return table([["Campus"],[head,"num"],["When"],["Now"],["Subject most affected"]], sorted.map(r => {
       const tr = today[r.campus], subj = tr && tr.subject ? esc(tr.subject.subject) : '<span class="dim">—</span>';
+      const idl = r.still && M.to === D.report_date ? idleOf(r.campus) : null;
       return `<tr><td>${r.still ? `<b>${esc(r.short)}</b>` : esc(r.short)}</td><td class="num">${r.days}</td><td>${r.spans.map(span).join(", ")}</td>
-        <td>${r.still ? '<span class="bad">Still on the list</span>' : `<span class="dim">Off since ${nextDay(r.last)}</span>`}</td><td>${r.still ? subj : '<span class="dim">—</span>'}</td></tr>`;
+        <td>${idl ? `<span class="warnt">No sessions since ${day(idl.last)}</span><br><span class="dim">Still listed on older sessions</span>`
+          : r.still ? '<span class="bad">Still on the list</span>' : `<span class="dim">Off since ${nextDay(r.last)}</span>`}</td><td>${r.still ? subj : '<span class="dim">—</span>'}</td></tr>`;
     }), "t-wlh-" + t);
   };
   const mrows = M.managers.map(r => `<tr><td>${esc(r.manager)}</td><td class="num">${r.done} of ${r.total}</td>` +
@@ -503,7 +511,7 @@ function vMonth(el) {
     <div class="legend"><span><i style="background:var(--s1)"></i>Lecture</span><span><i style="background:var(--s2)"></i>Practice</span></div><div class="chart" id="cAvg"></div>
     <h3>Sessions with a completed QA evaluation, per day</h3>
     <p class="note">Of the lecture and practice sessions held each day, the share with a completed QA evaluation in the QA rating data${lastCov ? ` (on ${day(lastCov.date)}: ${lastCov.with_qa.toLocaleString()} of ${lastCov.sessions.toLocaleString()}, ${lastCov.coverage}%)` : ""}. A dip means more sessions had no finished evaluation that day; it says nothing about how good they were, and nothing about instructors opening their reports. Hollow points had fewer than 50 sessions, so the percentage swings easily.</p><div class="chart" id="cCov"></div>${dlBtn(null, "network_daily", "net")}</div>
-    <div class="panel"><h2 class="sec">Watchlist history</h2><p class="note">Campuses that were on the watchlist at some point this month: their scores fell behind other campuses teaching the same subjects (last 14 days against the 14 before). Still on the list first.${M.watch_from > M.from ? ` Checked from ${day(M.watch_from)}: each day needs 28 days of earlier QA data, and the saved data starts on ${day(M.data_from)}.` : ""}</p>
+    <div class="panel"><h2 class="sec">Watchlist history</h2><p class="note">Campuses that were on the watchlist at some point this month: their scores fell behind other campuses teaching the same subjects (last 14 days against the 14 before). Still on the list first. A campus with no sessions lately stays listed on its older sessions until new ones come in.${M.watch_from > M.from ? ` Checked from ${day(M.watch_from)}: each day needs 28 days of earlier QA data, and the saved data starts on ${day(M.data_from)}.` : ""}</p>
     <h3>Lectures${dlBtn(null, "watchlist_lecture", "wl-lecture")}</h3>${wlGrid("lecture")}<h3>Practice${dlBtn(null, "watchlist_practice", "wl-practice")}</h3>${wlGrid("practice")}</div>
     <div class="panel"><h2 class="sec">Capability Managers × day</h2><p class="note">Connects completed each day (hover for completion rate and bottom-quarter instructors still waiting for a connect). Last column: bottom-quarter instructors not connected in 14 days, on ${day(M.to)}.</p>
     ${dlBtn("t-mx","managers_by_day")}${table([["Manager"],["Done","num"], ...days.map(d => [String(dt(d).getDate()), "num"]), ["Waiting","num"]], mrows, "t-mx")}</div>

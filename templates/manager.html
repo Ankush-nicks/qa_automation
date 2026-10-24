@@ -474,14 +474,21 @@ function vDetail(el) {
 function vMonth(el) {
   const M = D.month_view;
   const days = M.network.map(r => r.date);
+  // one row per campus: how long it has been on the list this month, and whether it still is
+  const span = x => x.from === x.to ? day(x.from) : (dt(x.from).getMonth() === dt(x.to).getMonth()
+    ? `${dt(x.from).getDate()}–${day(x.to)}` : `${day(x.from)} – ${day(x.to)}`);
+  const nextDay = s => { const d = dt(s); d.setDate(d.getDate() + 1); return `${d.getDate()} ${MON[d.getMonth()]}`; };
   const wlGrid = t => {
     const rows = M.watchlist[t];
     if (!rows.length) return '<p class="note">No campus was on this list this month.</p>';
-    const head = `<span></span>` + days.map(d => `<span class="ghead">${dt(d).getDate()}</span>`).join("");
-    const body = rows.map(r => `<span class="glbl" title="${esc(r.campus)}">${esc(r.short)} <span class="dim">${r.days}d</span></span>` +
-      days.map(d => d < M.watch_from ? `<span class="gcell none" title="${day(d)}: can’t be checked, not enough earlier data"></span>`
-        : `<span class="gcell ${r.on.includes(d) ? "on" : ""}" title="${esc(r.short)} · ${day(d)} · ${r.on.includes(d) ? "on the list" : "not listed"}"></span>`).join("")).join("");
-    return `<div style="overflow-x:auto"><div class="grid-days" style="grid-template-columns:minmax(110px,190px) repeat(${days.length},minmax(10px,1fr));min-width:${110 + days.length * 12}px">${head}${body}</div></div>`;
+    const today = Object.fromEntries((D.watchlist[t] ? D.watchlist[t].rows : []).map(r => [r.campus, r]));
+    const sorted = [...rows].map(r => ({...r, still: r.on.includes(M.to), last: r.on[r.on.length - 1]}))
+      .sort((a, b) => (b.still - a.still) || (b.days - a.days) || a.short.localeCompare(b.short));
+    return table([["Campus"],["Days on the list","num"],["When"],["Now"],["Subject most affected"]], sorted.map(r => {
+      const tr = today[r.campus], subj = tr && tr.subject ? esc(tr.subject.subject) : '<span class="dim">—</span>';
+      return `<tr><td>${r.still ? `<b>${esc(r.short)}</b>` : esc(r.short)}</td><td class="num">${r.days}</td><td>${r.spans.map(span).join(", ")}</td>
+        <td>${r.still ? '<span class="bad">Still on the list</span>' : `<span class="dim">Off since ${nextDay(r.last)}</span>`}</td><td>${r.still ? subj : '<span class="dim">—</span>'}</td></tr>`;
+    }), "t-wlh-" + t);
   };
   const mrows = M.managers.map(r => `<tr><td>${esc(r.manager)}</td><td class="num">${r.done} of ${r.total}</td>` +
     r.days.map(x => `<td class="num" title="${day(x.date)}: ${x.done} done of ${x.n}${x.rate == null ? "" : ` (${x.rate}% of settled)`}; ${x.waiting} bottom-quarter not connected">${x.n ? x.done : '<span class="dim">·</span>'}</td>`).join("") +
@@ -494,7 +501,7 @@ function vMonth(el) {
     <div class="legend"><span><i style="background:var(--s1)"></i>Lecture</span><span><i style="background:var(--s2)"></i>Practice</span></div><div class="chart" id="cAvg"></div>
     <h3>Sessions with a completed QA evaluation, per day</h3>
     <p class="note">Of the lecture and practice sessions held each day, the share with a completed QA evaluation in the QA rating data${lastCov ? ` (on ${day(lastCov.date)}: ${lastCov.with_qa.toLocaleString()} of ${lastCov.sessions.toLocaleString()}, ${lastCov.coverage}%)` : ""}. A dip means more sessions had no finished evaluation that day; it says nothing about how good they were, and nothing about instructors opening their reports. Hollow points had fewer than 50 sessions, so the percentage swings easily.</p><div class="chart" id="cCov"></div>${dlBtn(null, "network_daily", "net")}</div>
-    <div class="panel"><h2 class="sec">Watchlist history</h2><p class="note">Red = on the watchlist that day (its last 14 days vs the 14 before); grey = not on it.${M.watch_from > M.from ? ` Days before ${day(M.watch_from)} are blank: each day needs 28 days of earlier QA data, and the saved data starts on ${day(M.data_from)}.` : ""}</p>
+    <div class="panel"><h2 class="sec">Watchlist history</h2><p class="note">Campuses that were on the watchlist at some point this month: their scores fell behind other campuses teaching the same subjects (last 14 days against the 14 before). Still on the list first.${M.watch_from > M.from ? ` Checked from ${day(M.watch_from)}: each day needs 28 days of earlier QA data, and the saved data starts on ${day(M.data_from)}.` : ""}</p>
     <h3>Lectures${dlBtn(null, "watchlist_lecture", "wl-lecture")}</h3>${wlGrid("lecture")}<h3>Practice${dlBtn(null, "watchlist_practice", "wl-practice")}</h3>${wlGrid("practice")}</div>
     <div class="panel"><h2 class="sec">Capability Managers × day</h2><p class="note">Connects completed each day (hover for completion rate and bottom-quarter instructors still waiting for a connect). Last column: bottom-quarter instructors not connected in 14 days, on ${day(M.to)}.</p>
     ${dlBtn("t-mx","managers_by_day")}${table([["Manager"],["Done","num"], ...days.map(d => [String(dt(d).getDate()), "num"]), ["Waiting","num"]], mrows, "t-mx")}</div>

@@ -484,7 +484,9 @@ function vMonth(el) {
     const today = Object.fromEntries((D.watchlist[t] ? D.watchlist[t].rows : []).map(r => [r.campus, r]));
     const sorted = [...rows].map(r => ({...r, still: r.on.includes(M.to), last: r.on[r.on.length - 1]}))
       .sort((a, b) => (b.still - a.still) || (b.days - a.days) || a.short.localeCompare(b.short));
-    return table([["Campus"],["Days on the list","num"],["When"],["Now"],["Subject most affected"]], sorted.map(r => {
+    const checked = Math.round((dt(M.to) - dt(M.watch_from)) / 864e5) + 1;
+    const head = `Days on the list in ${MON[dt(M.from).getMonth()]}` + (M.watch_from > M.from ? ` (of ${checked} checked)` : "");
+    return table([["Campus"],[head,"num"],["When"],["Now"],["Subject most affected"]], sorted.map(r => {
       const tr = today[r.campus], subj = tr && tr.subject ? esc(tr.subject.subject) : '<span class="dim">—</span>';
       return `<tr><td>${r.still ? `<b>${esc(r.short)}</b>` : esc(r.short)}</td><td class="num">${r.days}</td><td>${r.spans.map(span).join(", ")}</td>
         <td>${r.still ? '<span class="bad">Still on the list</span>' : `<span class="dim">Off since ${nextDay(r.last)}</span>`}</td><td>${r.still ? subj : '<span class="dim">—</span>'}</td></tr>`;

@@ -81,8 +81,8 @@ def _bool(s: pd.Series) -> pd.Series:
     return s.astype(str).str.strip().str.lower().isin(["true", "1", "yes", "t"])
 
 
-def read_bundle(uploads: list[tuple[str, bytes]]) -> dict:
-    """Returns {"frames": {key: DataFrame}, "checks": [...], "ranges": {...}, "export_date": str|None}.
+def raw_frames(uploads: list[tuple[str, bytes]]) -> tuple[dict, dict[str, bytes]]:
+    """The four CSVs as all-text DataFrames (lower-case columns), plus every CSV found.
     Raises BundleError (with every problem listed) when a required file or column is missing."""
     files = collect(uploads)
     frames, problems = {}, []
@@ -106,7 +106,24 @@ def read_bundle(uploads: list[tuple[str, bytes]]) -> dict:
         found = ", ".join(sorted(files)) or "no CSV files"
         raise BundleError("The upload can’t be used: " + "; ".join(problems) + f". Found: {found}. "
                           "Upload the daily qa_exports_YYYYMMDD.zip.")
+    return frames, files
 
+
+def upload_export_date(uploads: list[tuple[str, bytes]]) -> str | None:
+    return next((export_date(n) for n, _ in uploads if export_date(n)), None)
+
+
+def read_bundle(uploads: list[tuple[str, bytes]]) -> dict:
+    """Returns {"frames": {key: DataFrame}, "checks": [...], "ranges": {...}, "export_date": str|None}."""
+    frames, files = raw_frames(uploads)
+    out = prepare(frames, upload_export_date(uploads))
+    out["has_instructor_file"] = instructor_file(files) is not None
+    return out
+
+
+def prepare(frames: dict, exp: str | None = None, first_check: str | None = None) -> dict:
+    """Parses the all-text frames (from an upload or the database) and lists the checks."""
+    frames = {k: v.copy() for k, v in frames.items()}
     q = frames["qa_daily"]
     q["session_date"] = pd.to_datetime(q["session_date"], errors="coerce")
     for c in NUMERIC:
@@ -143,9 +160,7 @@ def read_bundle(uploads: list[tuple[str, bytes]]) -> dict:
         else:
             ranges[key] = {"rows": int(len(frames[key]))}
 
-    names = [n for n, _ in uploads]
-    exp = next((export_date(n) for n in names if export_date(n)), None)
-    checks = [{"level": "ok", "text": "All four files are present with the expected columns."}]
+    checks = [{"level": "ok", "text": first_check or "All four files are present with the expected columns."}]
     checks.append({"level": "info", "text": "Dates: QA " + _rng(ranges["qa_daily"]) + " · connects "
                    + _rng(ranges["manager_connects"]) + " · platform use " + _rng(ranges["manager_activity"])
                    + (f" · exported {pd.Timestamp(exp):%d %b %Y}" if exp else "")})
@@ -153,8 +168,7 @@ def read_bundle(uploads: list[tuple[str, bytes]]) -> dict:
     if len(orphan):
         checks.append({"level": "warn", "text": f"{len(orphan):,} connects belong to {orphan.manager_id.nunique()} "
                        "manager ids that aren’t in the directory; they’re left out of the manager table."})
-    return {"frames": frames, "checks": checks, "ranges": ranges, "export_date": exp,
-            "has_instructor_file": instructor_file(files) is not None}
+    return {"frames": frames, "checks": checks, "ranges": ranges, "export_date": exp, "has_instructor_file": False}
 
 
 def _rng(r: dict) -> str:

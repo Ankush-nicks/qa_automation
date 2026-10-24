@@ -20,6 +20,7 @@ fails, a rule-based draft is always available.
 - `google_apps_script/Code.gs` – the Google Apps Script that sends emails (from Gmail, or from Outlook through Microsoft Graph) and logs them in a Google Sheet (setup: `GOOGLE_SHEETS.md`, `OUTLOOK.md`)
 - `bundle.py` – page 2: reads the daily BigQuery zip (or its CSVs), checks files, columns and dates
 - `manager_engine.py` – page 2: campus analysis, watchlists, instructor last-3-QA-day averages, Capability Managers and connects, month view
+- `store.py` – page 2: saves each upload in a Turso database and keeps the last `KEEP_DAYS` days (`TURSO.md`)
 - `daily_email.py`, `templates/daily_email.html` – page 2: the approved daily email (HTML + plain text)
 - `templates/manager.html` – page 2 (`/manager`)
 - `bigquery/` – the five BigQuery export queries and the daily scripts (see `bigquery/README.md`)
@@ -65,6 +66,9 @@ fails, a rule-based draft is always available.
      `capability_managers.xlsx` are CC'd. It uses the same sender, `SEND_MODE` and Sent log as page 1
    - `APP_URL` – optional: the app's address for the email's "Open the full analysis" button (defaults to the
      address the page was opened from)
+   - `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` – optional: page 2 saves each upload in this Turso database
+     and opens on the saved data (`TURSO.md`). Unset = nothing is stored and the zip is needed every time
+   - `KEEP_DAYS` – optional, default `30` (minimum 28): how many days of QA data the database keeps
    - `APP_PASSWORD` – optional but recommended; the browser will ask for it (any username)
    - To use Claude instead: `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`; `ANTHROPIC_MODEL` is optional and defaults to `claude-haiku-5-5`
 5. Deploy and open the URL.
@@ -73,7 +77,9 @@ fails, a rule-based draft is always available.
 Every morning:
 1. Cloud Shell: `bash ~/bigquery/daily_cloudshell.sh` downloads `qa_exports_YYYYMMDD.zip` (5 CSVs).
 2. Open **Manager analysis** and drop the zip. The app checks the four page-2 files (columns, date ranges) and
-   shows the checks at the top. Nothing is stored.
+   shows the checks at the top. With Turso set up the upload is saved: it replaces the days it covers, only the
+   last `KEEP_DAYS` days are kept, and the page opens on the saved data next time (no upload needed). Without
+   Turso nothing is stored.
 3. The report date defaults to the latest day in `qa_daily.csv` (yesterday); the month view to its month.
    Changing either re-runs the analysis.
 4. Tabs: Act on these today · Campus analysis · Manager connect usage · Manager detail · Month view · Daily email.

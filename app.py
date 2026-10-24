@@ -22,7 +22,8 @@ import pandas as pd
 
 import daily_email
 import llm
-from bundle import BundleError, read_bundle
+import store as dbstore
+from bundle import BundleError, prepare, raw_frames, read_bundle, upload_export_date, instructor_file
 from manager_engine import Engine
 from managers import load_managers, match_managers
 from qa_engine import analyze, read_export
@@ -429,27 +430,76 @@ def _daily_recipients() -> dict:
     return {"to": to, "cc": [e for e in dict.fromkeys(cc) if e not in to]}
 
 
-def _uploads():
-    files = [f for f in request.files.getlist("files") if f and f.filename]
-    if not files:
-        raise BundleError("Choose the daily qa_exports_YYYYMMDD.zip first.")
-    return [(f.filename, f.read()) for f in files]
-
-
 @app.get("/manager")
 def manager_page():
     return send_from_directory(BASE / "templates", "manager.html")
 
 
+# Turso keeps the uploads (store.py): each upload overrides what it covers, KEEP_DAYS days are kept,
+# and the page opens on the saved data. Without TURSO_DATABASE_URL nothing is stored.
+try:
+    STORE = dbstore.from_env()
+    STORE_ERROR = ""
+except dbstore.StoreError as e:
+    STORE, STORE_ERROR = None, str(e)
+_saved = {"version": None, "bundle": None}
+
+
+def _saved_bundle():
+    """The saved data, parsed once per upload. None when nothing is saved yet."""
+    got = STORE.load()
+    if not got:
+        return None
+    frames, meta = got
+    if _saved["version"] != meta["version"]:
+        up = pd.Timestamp(meta["updated_at"]).tz_convert("Asia/Kolkata")
+        first = (f"Saved data: QA from {pd.Timestamp(meta['cutoff']):%d %b} to {pd.Timestamp(meta['latest_qa']):%d %b} "
+                 f"(the last {meta.get('keep_days', '30')} days), updated {up:%d %b %H:%M} IST"
+                 + (f" from {meta['last_file']}" if meta.get("last_file") else "") + ".")
+        _saved["bundle"] = prepare(frames, meta.get("export_date") or None, first_check=first)
+        _saved["version"] = meta["version"]
+    return _saved["bundle"]
+
+
+@app.get("/api/manager/saved")
+def api_manager_saved():
+    if not STORE:
+        return jsonify(configured=False, error=STORE_ERROR)
+    try:
+        meta = STORE.meta()
+        return jsonify(configured=True, has_data=bool(meta.get("version")), latest_qa=meta.get("latest_qa"),
+                       cutoff=meta.get("cutoff"), updated_at=meta.get("updated_at"), keep_days=dbstore.keep_days(),
+                       uploads=STORE.uploads(10))
+    except dbstore.StoreError as e:
+        return jsonify(configured=True, has_data=False, error=str(e))
+
+
 @app.post("/api/manager/analyze")
 def api_manager_analyze():
-    """The zip (or the four CSVs) -> everything page 2 shows, plus the daily email."""
+    """The zip (or the four CSVs) -> everything page 2 shows, plus the daily email. With the database
+    set up, an upload is saved first and the analysis runs on the saved data; no upload = saved data."""
+    saved = None
     try:
-        b = read_bundle(_uploads())
-        eng = Engine(b["frames"], manager_map())
+        ups = [(f.filename, f.read()) for f in request.files.getlist("files") if f and f.filename]
+        if STORE:
+            if ups:
+                raw, found = raw_frames(ups)
+                saved = STORE.ingest(raw, upload_export_date(ups), ", ".join(n for n, _ in ups))
+            b = _saved_bundle()
+            if b is None:
+                raise BundleError("Nothing is saved yet. Upload today’s qa_exports_YYYYMMDD.zip.")
+            if ups:
+                b = {**b, "has_instructor_file": instructor_file(found) is not None}
+        else:
+            if not ups:
+                raise BundleError("Choose the daily qa_exports_YYYYMMDD.zip first.")
+            b = read_bundle(ups)
+        eng = Engine({k: v.copy() for k, v in b["frames"].items()}, manager_map())
         out = eng.analyze(request.form.get("report_date") or None, request.form.get("month") or None)
     except (BundleError, ValueError) as e:
-        return jsonify(error=str(e)), 400
+        return jsonify(error=str(e), saved=saved), 400
+    except dbstore.StoreError as e:
+        return jsonify(error=f"The database step failed: {e}", saved=saved), 502
     except Exception as e:  # noqa: BLE001
         app.logger.exception("manager analysis failed")
         return jsonify(error=f"The analysis failed ({e}). Check the files are today’s BigQuery export."), 500
@@ -463,6 +513,8 @@ def api_manager_analyze():
                     "text": daily_email.render_text(out, link), **_daily_recipients()}
     out["bundle"] = {"checks": b["checks"], "ranges": b["ranges"], "export_date": b["export_date"],
                      "has_instructor_file": b["has_instructor_file"]}
+    out["saved"] = saved
+    out["db"] = bool(STORE)
     return Response(json.dumps(_clean(out), ensure_ascii=False), mimetype="application/json")
 
 

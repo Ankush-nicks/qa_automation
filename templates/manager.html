@@ -151,9 +151,9 @@ iframe.preview{width:100%;height:900px;border:1px solid var(--line);border-radiu
       <p>The <code>qa_exports_YYYYMMDD.zip</code> from <code>bash ~/bigquery/daily_cloudshell.sh</code>. You can also choose the four CSVs (qa_daily, manager_map, manager_connects, manager_activity) together.</p>
       <label class="btn" for="fileInput">Choose file</label>
       <input type="file" id="fileInput" accept=".zip,.csv,application/zip,text/csv" multiple>
-      <p class="fine">Processed on this server in memory and not stored. Contains instructor names: internal use only.</p>
+      <p class="fine" id="storeNote">Processed on this server in memory and not stored. Contains instructor names: internal use only.</p>
     </div>
-    <div class="loading hidden" id="dropBusy" role="status" aria-live="polite"><span class="spin" aria-hidden="true"></span><b>Reading the export and building the analysis…</b><span class="dim">This takes a few seconds.</span></div>
+    <div class="loading hidden" id="dropBusy" role="status" aria-live="polite"><span class="spin" aria-hidden="true"></span><b id="busyText">Reading the export and building the analysis…</b><span class="dim">This takes a few seconds.</span></div>
     <div class="err hidden" id="err" role="alert"></div>
   </section>
 
@@ -162,7 +162,7 @@ iframe.preview{width:100%;height:900px;border:1px solid var(--line);border-radiu
       <div class="field"><label for="date">Report date</label><input type="date" id="date"></div>
       <div class="field"><label for="month">Month view</label><input type="month" id="month"></div>
       <span class="sendstatus" id="sendStatus"></span>
-      <div class="filebar"><span id="fileName"></span><label class="btn ghost small" for="fileInput2">Replace file</label>
+      <div class="filebar"><span id="fileName"></span><label class="btn ghost small" for="fileInput2" id="replaceLbl">Replace file</label>
         <input type="file" id="fileInput2" accept=".zip,.csv,application/zip,text/csv" multiple></div>
     </div>
     <div class="busyline hidden" id="busy" role="status"><span class="spin" aria-hidden="true"></span>Updating…</div>
@@ -186,7 +186,7 @@ const wday = s => s ? `${WD[dt(s).getDay()]} ${day(s)}` : "no data";
 const n2 = v => v == null ? '<span class="dim">no data</span>' : Number(v).toFixed(2);
 const sg = v => v == null ? '<span class="dim">no data</span>' : (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(2);
 const pct = v => v == null ? '<span class="dim">no data</span>' : v + "%";
-let files = null, D = null, tab = "act", pickMgr = null, sendCfg = null, showAllSubj = false;
+let files = null, D = null, tab = "act", pickMgr = null, sendCfg = null, showAllSubj = false, saved = null;
 try { tab = localStorage.getItem("mgr.tab") || "act"; } catch (e) {}
 
 function toast(msg, ms = 3200) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), ms); }
@@ -194,10 +194,14 @@ function showErr(where, msg) { const e = $(where); e.textContent = msg; e.classL
 
 // ------------------------------------------------------------------ upload
 async function run(first) {
-  if (!files) return;
+  const useSaved = saved && saved.configured;
+  if (!files && !(useSaved && (saved.has_data || D))) return;
   const fd = new FormData();
-  for (const f of files) fd.append("files", f, f.name);
-  if (!first) { fd.append("report_date", $("#date").value); fd.append("month", $("#month").value); }
+  const sending = files;
+  for (const f of files || []) fd.append("files", f, f.name);
+  $("#busyText").textContent = sending && useSaved ? "Saving the upload and building the analysis…"
+    : sending ? "Reading the export and building the analysis…" : "Opening the saved data…";
+  if (!first && !sending) { fd.append("report_date", $("#date").value); fd.append("month", $("#month").value); }
   if (first) { $("#dropIdle").classList.add("hidden"); $("#dropBusy").classList.remove("hidden"); showErr("#err", ""); }
   else { $("#busy").classList.remove("hidden"); showErr("#err2", ""); }
   try {
@@ -205,6 +209,10 @@ async function run(first) {
     const j = await r.json().catch(() => ({error: `The server answered ${r.status}.`}));
     if (!r.ok || j.error) throw new Error(j.error || `The server answered ${r.status}.`);
     D = j;
+    if (j.db) {
+      files = null; saved.has_data = true;
+      if (j.saved) toast(`Saved ${sending.map(f => f.name).join(", ")}: ${j.saved.added.toLocaleString()} rows added, ${j.saved.removed.toLocaleString()} removed. Kept: ${day(j.saved.cutoff)} – ${day(j.saved.latest_qa)}.`, 6000);
+    }
     if (!pickMgr || !D.managers.includes(pickMgr)) pickMgr = D.managers[0] || null;
     $("#drop").classList.add("hidden"); $("#app").classList.remove("hidden");
     render();
@@ -221,13 +229,23 @@ function takeFiles(list) {
   run(!D);
 }
 $("#fileInput").addEventListener("change", e => takeFiles(e.target.files));
-$("#fileInput2").addEventListener("change", e => { D = null; takeFiles(e.target.files); });
+$("#fileInput2").addEventListener("change", e => { if (!(saved && saved.configured)) D = null; takeFiles(e.target.files); e.target.value = ""; });
 const drop = $("#drop");
 ["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
 ["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
 drop.addEventListener("drop", e => takeFiles(e.dataTransfer.files));
 $("#date").addEventListener("change", () => run(false));
 $("#month").addEventListener("change", () => run(false));
+
+fetch("/api/manager/saved").then(r => r.json()).then(j => {
+  saved = j;
+  if (!j.configured) return;
+  $("#replaceLbl").textContent = "Upload new zip";
+  $("#fileName").textContent = "Saved data";
+  $("#storeNote").textContent = j.error ? `The database isn’t reachable: ${j.error}`
+    : `Saved to the database: each upload replaces the days it covers, and only the last ${j.keep_days} days are kept. Contains instructor names: internal use only.`;
+  if (j.has_data && !files) run(true);
+}).catch(() => {});
 
 fetch("/api/status").then(r => r.json()).then(j => {
   sendCfg = j.send || null;

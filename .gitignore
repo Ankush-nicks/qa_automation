@@ -15,3 +15,4 @@ bigquery/4_manager_activity.filled.sql
 *.mp4
 *.db
 *.db-journal
+*.env

@@ -396,7 +396,7 @@ function handleFile(file){ if(!file) return; state.file=file; analyze(true); }
 
 // With the database set up, the page opens on the last saved file (from either page)
 fetch("/api/manager/saved").then(r=>r.json()).then(j=>{
-  if(!j.configured) return;
+  if(!j.configured){ if(j.error) $("storeNote").textContent=`Saving is off: ${j.error} Check the Turso settings in Render.`; return; }
   $("storeNote").textContent = j.error ? `The database isn’t reachable: ${j.error}`
     : "Saved to the database: the daily zip uploaded here or on Manager analysis is used by both pages. Only the selected instructor’s scores are sent to the AI when you write an email.";
   if(j.instructor_file && !state.file && !state.data){ state.useSaved=true; analyze(true); }

@@ -98,7 +98,8 @@ class _Turso:
         if t == "float":
             return float(v["value"])
         if t == "blob":
-            return base64.b64decode(v.get("base64", ""))
+            b = v.get("base64", "")  # Turso sends it without padding
+            return base64.b64decode(b + "=" * (-len(b) % 4))
         return v.get("value")
 
     def query(self, sql: str) -> list[tuple]:
@@ -444,6 +445,8 @@ def from_env() -> Store | None:
     if re.match(r"^(libsql|https?|wss?)://", url):
         token = os.getenv("TURSO_AUTH_TOKEN", "").strip()
         if not token:
-            raise StoreError("TURSO_AUTH_TOKEN is missing.")
+            near = [k for k in os.environ if k != "TURSO_AUTH_TOKEN" and "TURSO_AUTH" in k.upper()]
+            raise StoreError("TURSO_AUTH_TOKEN is missing" + (f" (found {', '.join(repr(k) for k in near)}: "
+                             "check the name)" if near else "") + ".")
         return Store(_Turso(url, token))
     return Store(_Local(re.sub(r"^file:", "", url)))

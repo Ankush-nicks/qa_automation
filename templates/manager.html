@@ -239,7 +239,7 @@ $("#month").addEventListener("change", () => run(false));
 
 fetch("/api/manager/saved").then(r => r.json()).then(j => {
   saved = j;
-  if (!j.configured) return;
+  if (!j.configured) { if (j.error) $("#storeNote").textContent = `Saving is off: ${j.error} Check the Turso settings in Render.`; return; }
   $("#replaceLbl").textContent = "Upload new zip";
   $("#fileName").textContent = "Saved data";
   $("#storeNote").textContent = j.error ? `The database isn’t reachable: ${j.error}`

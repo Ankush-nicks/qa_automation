@@ -3,25 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manager analysis</title>
+<title>University drill-down</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* Answer-sheet design: a white sheet on a cool desk, structure printed in drop-out blue,
-   graphite for ink and filled marks, exam-red only for problems. Bubbles mark what needs acting on:
-   filled = act, hollow = known or fine. */
+/* The calm sheet: a white sheet on a cool desk, graphite ink, blue-grey structure, red and amber
+   only for problems. Layers: numbers, what needs attention, the list to open, folded detail. */
 :root{
   --desk:#F5F6F8; --sheet:#FFFFFF; --ink:#2B3039; --muted:#6B7280;
   --blue:#7C93C3; --blue-ink:#4A5F8E; --rule:#E3E6EB; --rule-soft:#EEF0F3; --blue-tint:#F2F4F9;
   --red:#B4483E; --red-tint:#FBEFED; --amber:#A8742A; --amber-tint:#FAF3E6; --green:#3D7D5E; --green-tint:#EBF5EF;
-  /* names the scripts and charts use */
-  --paper:var(--desk); --surface:var(--sheet); --line:var(--rule); --accent:var(--blue-ink); --accent-ink:#FFFFFF; --accent-tint:var(--blue-tint);
-  --low:var(--red); --low-bg:var(--red-tint); --mid:var(--amber); --mid-bg:var(--amber-tint); --ok:var(--green); --ok-bg:var(--green-tint);
-  --none-bg:#E8ECF3; --orange:#B5531A; --orange-bg:#FBE9DC;
-  --s1:#2a78d6; --s2:#eb6834; --grid:#E3E9F5;
-  --done:#2E7D57; --missed:#C0392B; --resched:#C98500; --pending:#8C93A8;
+  --tech:#2a78d6; --apt:#eb6834; --math:#1baf7a; --eng:#c98a00; --grid:#E3E9F5;
+  --fg:var(--ink); --panel:var(--sheet);  /* names the drill-down script uses */
   color-scheme: light; box-sizing:border-box;
 }
 @media (prefers-color-scheme: dark){
@@ -29,19 +24,15 @@
     --desk:#15181E; --sheet:#1B1F26; --ink:#DDE1E8; --muted:#9AA1AE;
     --blue:#8EA3CF; --blue-ink:#AEBEE0; --rule:#2C323D; --rule-soft:#242931; --blue-tint:#212734;
     --red:#E3958B; --red-tint:#33252A; --amber:#D9B26E; --amber-tint:#2F2A1E; --green:#86C4A2; --green-tint:#1C2B25;
-    --accent-ink:#12161D; --none-bg:#262C38; --orange:#F2A26F; --orange-bg:#3A2619;
-    --s1:#3987e5; --s2:#d95926; --grid:#262E3E;
-    --done:#4FB383; --missed:#E66767; --resched:#D9A33A; --pending:#7A8199;
+    --tech:#5b9cf0; --apt:#f2875a; --math:#3fca94; --eng:#f0bd3a; --grid:#262E3E;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"]{
   --desk:#15181E; --sheet:#1B1F26; --ink:#DDE1E8; --muted:#9AA1AE;
-    --blue:#8EA3CF; --blue-ink:#AEBEE0; --rule:#2C323D; --rule-soft:#242931; --blue-tint:#212734;
-    --red:#E3958B; --red-tint:#33252A; --amber:#D9B26E; --amber-tint:#2F2A1E; --green:#86C4A2; --green-tint:#1C2B25;
-  --accent-ink:#12161D; --none-bg:#262C38; --orange:#F2A26F; --orange-bg:#3A2619;
-  --s1:#3987e5; --s2:#d95926; --grid:#262E3E;
-  --done:#4FB383; --missed:#E66767; --resched:#D9A33A; --pending:#7A8199;
+  --blue:#8EA3CF; --blue-ink:#AEBEE0; --rule:#2C323D; --rule-soft:#242931; --blue-tint:#212734;
+  --red:#E3958B; --red-tint:#33252A; --amber:#D9B26E; --amber-tint:#2F2A1E; --green:#86C4A2; --green-tint:#1C2B25;
+  --tech:#5b9cf0; --apt:#f2875a; --math:#3fca94; --eng:#f0bd3a; --grid:#262E3E;
   color-scheme: dark;
 }
 *,*::before,*::after{box-sizing:inherit}
@@ -49,36 +40,26 @@ body{margin:0;background:var(--desk);color:var(--ink);font:16px/1.55 "Source San
 button,input,select,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .hidden{display:none!important}
-
-/* the sheet */
 .wrap{max-width:1280px;margin:16px auto 48px;padding:28px 36px 40px;background:var(--sheet);border:1px solid var(--rule-soft);border-radius:6px}
 @media (max-width:700px){.wrap{margin:0;padding:20px 16px 40px;border:0;border-radius:0}}
 
-/* bubbles: the one mark used everywhere */
-.bub{display:inline-block;flex:none;width:9px;height:9px;border-radius:50%;border:1.5px solid var(--rule);vertical-align:1px;background:transparent}
-.bub.on{background:var(--blue);border-color:var(--blue)}
-.bub.red{background:var(--red);border-color:var(--red)}
-.bub.amber{background:var(--amber);border-color:var(--amber)}
-
-/* page switch and tabs: a row of options, the chosen one filled in */
+/* page switch and tabs */
 .pagenav,.tabs{display:flex;flex-wrap:wrap;gap:4px 22px}
 .pagenav{margin-bottom:18px;font-size:14px}
 .pagenav a,.tab{display:inline-flex;align-items:center;gap:8px;color:var(--muted);text-decoration:none;background:none;border:0;padding:4px 0;cursor:pointer;font-size:inherit}
-.pagenav a::before,.tab::before{content:none}
 .pagenav a[aria-current="page"],.tab[aria-selected="true"]{color:var(--ink);font-weight:600;box-shadow:inset 0 -2px 0 var(--blue)}
-
 .pagenav a:hover,.tab:hover{color:var(--ink)}
 .tabs{border-bottom:1px solid var(--rule);padding:0;gap:4px 26px;margin:18px 0 24px;font-size:14.5px}
 .tab{padding:10px 0}
 
-/* header */
-header.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;margin-bottom:16px}
+header.top{margin-bottom:16px}
 h1{font-size:26px;line-height:1.2;margin:0;font-weight:600;letter-spacing:-0.01em}
-.sub{margin:6px 0 0;color:var(--muted);font-size:14.5px;max-width:68ch}
+h2{font-size:21px;line-height:1.25;margin:0;font-weight:600;letter-spacing:-0.01em}
+h3{font-size:15.5px;font-weight:600;margin:0}
+.sub{margin:6px 0 0;color:var(--muted);font-size:14.5px;max-width:80ch}
 
 /* buttons */
 .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--blue-ink);background:var(--blue-ink);color:var(--sheet);padding:7px 14px;border-radius:6px;font-weight:600;cursor:pointer;text-decoration:none;white-space:nowrap}
-.btn:hover{background:var(--blue-ink);border-color:var(--blue-ink)}
 .btn.ghost{background:transparent;color:var(--blue-ink);border-color:var(--rule)}
 .btn.ghost:hover{background:var(--blue-tint)}
 .btn.small{padding:5px 12px;font-size:14px}
@@ -97,116 +78,147 @@ input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events
 @keyframes sp{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.spin{animation:none}}
 
-/* controls: a form row */
-.controls{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:flex-end;padding:0 0 14px;margin-bottom:14px;border-bottom:1px solid var(--rule-soft)}
+/* controls */
+.controls{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:flex-end;padding:0 0 14px;margin-bottom:6px;border-bottom:1px solid var(--rule-soft)}
 .field label{display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:4px}
 .field input,.field select{padding:6px 10px;border:1px solid var(--rule);border-radius:6px;background:var(--sheet)}
-.field input:focus,.field select:focus{border-color:var(--blue)}
 .filebar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;color:var(--muted);font-size:14px;margin-left:auto;min-width:0}
 .filebar span{overflow-wrap:anywhere}
 .sendstatus{font-size:14px;color:var(--muted)}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
-.dot.on{background:var(--green)} .dot.off{background:var(--amber)} .dot.test{background:var(--amber)}
-.busyline{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px;margin:0 0 10px}
+.dot.on{background:var(--green)} .dot.off,.dot.test{background:var(--amber)}
+.busyline{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px;margin:10px 0 0}
 .busyline .spin{width:16px;height:16px}
 
-/* data checks: one line, opens to the list */
-details.checks{margin:0 0 18px;font-size:14px}
-details.checks summary{cursor:pointer;color:var(--muted);list-style:none;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-details.checks summary::-webkit-details-marker{display:none}
-details.checks summary::after{content:"Show";color:var(--blue-ink);text-decoration:underline}
-details.checks[open] summary::after{content:"Hide"}
-details.checks summary b{color:var(--ink);font-weight:500}
-details.checks summary .warnc{color:var(--amber)}
-.check{padding:7px 0 7px 14px;border-left:3px solid var(--rule);margin-top:6px}
-.check.warn{border-color:var(--amber)} .check.ok{border-color:var(--green)}
+/* the drill-down's layers */
+.view{display:grid;gap:26px;min-width:0}
+.head{display:grid;gap:2px}
+.null{color:var(--muted);font-style:italic}
+.t-muted,.dim{color:var(--muted)}
+.note{color:var(--muted);font-size:13.5px;margin:8px 0 0;max-width:110ch}
+.empty{color:var(--muted);margin:0}
+.crumbs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:14px;color:var(--muted)}
+.crumbs button{border:0;background:none;padding:0;color:var(--blue-ink);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.crumbs .sep{opacity:.5}
 
-/* the day's figures: filled-in boxes of a form */
-.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px 0;margin:4px 0 0}
-.fig{padding:2px 18px;border-left:1px solid var(--rule-soft)}
-.fig:first-child{border-left:0;padding-left:0}
-.fig .k{font-size:12.5px;color:var(--muted)}
-.fig .v{font-size:22px;font-weight:600;line-height:1.3}
-.fig .s{font-size:13px;color:var(--muted)}
-.headline{margin:0}
+/* numbers: a row of figures, no boxes */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 0}
+.kpi{padding:2px 18px;border-left:1px solid var(--rule-soft);display:grid;gap:1px;align-content:start;min-width:0}
+.kpi:first-child{border-left:0;padding-left:0}
+.kpi .l{font-size:12.5px;color:var(--muted)}
+.kpi .v{font-size:22px;font-weight:600;line-height:1.3}
+.kpi .n{font-size:13px;color:var(--muted)}
 
-/* sections inside the sheet: separated by printed rules, not boxes */
-.panel{padding:0}
-.panel+.panel{margin-top:36px;padding-top:26px;border-top:1px solid var(--rule)}
-h2.sec{font-size:19px;font-weight:600;margin:0 0 6px;letter-spacing:-0.01em}
-h3{font-size:15px;font-weight:600;margin:26px 0 8px}
-h3:first-child{margin-top:0}
-.note{color:var(--muted);font-size:13.5px;margin:6px 0 0;max-width:100ch}
+/* needs attention: one line per item, a dot for how serious */
+.attn{display:grid;gap:4px}
+.attn h3{margin-bottom:4px}
+.attn ul{list-style:none;margin:0;padding:0;border-top:1px solid var(--rule)}
+.attn li{display:grid;grid-template-columns:9px 1fr;gap:12px;align-items:baseline;padding:10px 0;border-bottom:1px solid var(--rule-soft)}
+.attn li::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--amber);transform:translateY(-1px)}
+.attn li.bad::before{background:var(--red)} .attn li.good::before{background:var(--green)}
+.attn li > span{min-width:0;display:block}
+.attn .more{color:var(--muted);font-size:13.5px}
+details.ad > summary{list-style:none;display:flex;justify-content:space-between;align-items:baseline;gap:12px;cursor:pointer}
+details.ad > summary::-webkit-details-marker{display:none}
+.adt{color:var(--blue-ink);font-size:13.5px;white-space:nowrap;text-decoration:underline;text-underline-offset:3px}
+details.ad[open] .adt .s, details.ad:not([open]) .adt .h{display:none}
+.adb{margin-top:10px;display:grid;gap:6px}
+.lagmore summary{cursor:pointer;color:var(--blue-ink);font-size:13.5px}
+
+/* lists to open, and folded detail: separated by rules, not boxes */
+.card{min-width:0}
+.card > .ch{display:flex;flex-wrap:wrap;gap:8px 16px;justify-content:space-between;align-items:center;margin-bottom:10px}
+.card > .cb{min-width:0}
+.card > .cb + .cb{margin-top:6px}
+details.fold{border-top:1px solid var(--rule);min-width:0}
+details.fold:last-of-type{border-bottom:1px solid var(--rule)}
+.view > details.fold + details.fold{margin-top:-26px}
+details.fold > summary{list-style:none;cursor:pointer;padding:14px 0;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+details.fold > summary::-webkit-details-marker{display:none}
+details.fold > summary::before{content:"";width:7px;height:7px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(-45deg);margin-right:4px;align-self:center;transition:transform .15s}
+details.fold[open] > summary::before{transform:rotate(45deg)}
+@media (prefers-reduced-motion:reduce){details.fold > summary::before{transition:none}}
+details.fold .sum{color:var(--muted);font-size:14px}
+details.fold > .fb{padding:0 0 20px;display:grid;gap:12px;min-width:0}
 
 /* tables: ruled like a register */
-.tbl{overflow-x:auto;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.scroll{overflow-x:auto;min-width:0}
 table{border-collapse:collapse;width:100%;font-size:14px}
 th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--rule-soft);vertical-align:top}
 th{color:var(--muted);font-weight:500;font-size:12.5px;border-bottom:1px solid var(--rule);white-space:nowrap}
+.scroll > table{border-top:1px solid var(--rule)}
 tr:last-child td{border-bottom:0}
 td.num,th.num{text-align:right;white-space:nowrap}
-.bad{color:var(--red);font-weight:600}
-.warnt{color:var(--amber);font-weight:600}
-.dim{color:var(--muted)}
+tr.go{cursor:pointer}
+tr.go:hover td{background:var(--blue-tint)}
+tr.go:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
 tr.known td{color:var(--muted)}
-tr.noteline td{border-top:0;padding-top:0;color:var(--muted);font-size:13px}
-tr.hasnote td{border-bottom:0}
-td.mark{width:28px;padding-right:0}
+.lag table{font-size:13.5px} .lag td,.lag th{padding:6px 8px}
 
-/* reasons for no sessions */
-.reason{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.reason select,.reason input{padding:4px 8px;border:1px solid var(--rule);border-radius:6px;background:var(--sheet);font-size:13px}
-.reason input{width:14em;max-width:100%}
-.reason select.unknown{color:var(--red)}
+/* small marks */
+.pill{display:inline-block;font-size:12.5px;font-weight:600;border-radius:4px;padding:0 7px;white-space:nowrap;background:var(--amber-tint);color:var(--amber)}
+.pill.bad{color:var(--red);background:var(--red-tint)} .pill.good{color:var(--green);background:var(--green-tint)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;gap:6px;align-items:baseline;border:1px solid var(--rule);border-radius:4px;padding:1px 8px;font-size:13px;background:var(--sheet)}
+.chip.ulink{cursor:pointer;color:var(--blue-ink)}
+.chip.ulink:hover{background:var(--blue-tint)}
+.mini{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.mtrack{display:inline-block;width:64px;height:5px;border-radius:3px;background:var(--rule-soft);overflow:hidden}
+.mtrack > span{display:block;height:100%;background:var(--blue)}
+dl.kv{display:grid;grid-template-columns:max-content 1fr;gap:6px 18px;margin:0;font-size:14px}
+dl.kv dt{color:var(--muted)} dl.kv dd{margin:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px 36px}
+.search{padding:6px 10px;border:1px solid var(--rule);border-radius:6px;background:var(--sheet);min-width:220px}
+.up{color:var(--green);font-weight:600} .down{color:var(--red);font-weight:600}
 
-/* status words */
-.pill{display:inline-block;font-size:12px;font-weight:700;border-radius:4px;padding:1px 7px;white-space:nowrap}
-.pill.red{color:var(--red);background:var(--red-tint)} .pill.orange{color:var(--orange);background:var(--orange-bg)}
-.pill.amber{color:var(--amber);background:var(--amber-tint)} .pill.green{color:var(--green);background:var(--green-tint)}
-.pill.grey{color:var(--muted);background:transparent}
+@media (max-width:700px){.kpis{grid-template-columns:1fr 1fr}.kpi,.sc{border-left:0;padding-left:0}.sc{padding-bottom:18px;border-bottom:1px solid var(--rule-soft)}}
+/* day picker in the daily summary */
+.seg{display:flex;flex-wrap:wrap;gap:4px 18px;border-bottom:1px solid var(--rule)}
+.seg button{border:0;background:none;padding:8px 0;color:var(--muted);cursor:pointer;display:inline-flex;gap:6px;align-items:center;font-size:14px}
+.seg button[aria-pressed="true"]{color:var(--ink);font-weight:600;box-shadow:inset 0 -2px 0 var(--blue)}
+.cnt{font-size:11.5px;font-weight:700;border-radius:8px;padding:0 6px}
+.cnt.bad{background:var(--red-tint);color:var(--red)} .cnt.warn{background:var(--amber-tint);color:var(--amber)}
+.ds-group{padding:10px 0;border-bottom:1px solid var(--rule-soft)}
+.ds-group ul{margin:6px 0 0;padding-left:18px;font-size:14px;display:grid;gap:3px}
+.ds-group li.bad::marker{color:var(--red)} .ds-group li.warn::marker{color:var(--amber)}
 
-/* act today: bubbles in a column, like answers */
-.acts{list-style:none;margin:0;padding:0}
-.acts li{display:grid;grid-template-columns:22px 1fr;gap:4px;padding:12px 0;border-bottom:1px solid var(--rule-soft);align-items:start}
-.acts li:last-child{border-bottom:0}
-.acts li .bub{margin-top:8px}
-.acts li b{font-weight:600}
-.acts li.calm b{font-weight:400;color:var(--muted)}
-.acts .l{color:var(--muted);font-size:14px}
+/* subjects: four columns of figures, the chosen one underlined */
+.subj{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0}
+.sc{all:unset;box-sizing:border-box;cursor:pointer;display:grid;align-content:start;gap:6px;padding:4px 18px 12px;border-left:1px solid var(--rule-soft)}
+.sc:first-child{border-left:0;padding-left:0}
+.sc:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.sc .t{font-weight:600;display:flex;gap:8px;align-items:center}
+.sc .t::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--c)}
+.sc[aria-pressed="true"]{box-shadow:inset 0 -2px 0 var(--c)}
+.sc .big{font-size:24px;font-weight:600}
+.sc dl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;margin:0;font-size:13.5px}
+.sc dt{color:var(--muted)} .sc dd{margin:0;text-align:right}
 
-/* figures in manager detail */
-.stats{display:flex;flex-wrap:wrap;gap:12px 0;margin:8px 0 4px}
-.stat{padding:2px 18px;min-width:130px;border-left:1px solid var(--rule-soft)}
-.stat:first-child{border-left:0;padding-left:0}
-.stat .v{font-size:20px;font-weight:600}
-.stat .k{font-size:12.5px;color:var(--muted)}
-
-/* charts */
+/* chart */
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--muted)}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
 .chart{position:relative}
 .chart svg{display:block;width:100%;height:auto;overflow:visible}
 @media (max-width:700px){.chart{overflow-x:auto}.chart svg{min-width:680px}}
-.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--muted);margin:4px 0 6px}
-.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
-.legend i.sq{height:10px;width:10px;border-radius:2px}
-.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--sheet);font-size:12.5px;padding:6px 9px;border-radius:4px;white-space:nowrap;transform:translate(-50%,-110%);opacity:0;transition:opacity .1s;z-index:5}
-.tip.on{opacity:1}
-.grid-days{display:grid;gap:2px;align-items:center}
-.gcell{height:10px;border-radius:50%;width:10px;justify-self:center;background:var(--rule-soft)}
-.gcell.on{background:var(--red)}
-.gcell.none{background:transparent;height:1px;width:8px;border-radius:0;background:var(--rule)}
-.glbl{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:8px}
-.ghead{font-size:11px;color:var(--muted);text-align:center}
+.chart .grid line{stroke:var(--grid)} .chart text{fill:var(--muted);font-size:12px}
+.chart text.lab{fill:var(--ink);font-size:12.5px}
+.chart .xh{stroke:var(--muted);stroke-dasharray:3 3}
+.chart .tip{position:absolute;top:8px;background:var(--ink);color:var(--sheet);font-size:12.5px;padding:7px 10px;border-radius:4px;pointer-events:none;min-width:150px;z-index:5}
+.chart .tip .t-muted{color:inherit;opacity:.7}
+
+/* reasons for no session */
+.reason{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.reason select,.reason input{padding:3px 8px;border:1px solid var(--rule);border-radius:6px;background:var(--sheet);font-size:13px}
+.reason input{width:12em;max-width:100%}
 
 /* email tab */
 .emailbar{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:12px}
 .emailbar .field{flex:1 1 260px}
 .emailbar .field input{width:100%}
-iframe.preview{width:100%;height:900px;border:1px solid var(--rule);border-radius:6px;background:#f2f4f7}
-.mpick{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:6px}
-.dl{font-size:13px;margin-left:8px;font-weight:400}
-.dl button{background:none;border:0;color:var(--blue-ink);cursor:pointer;text-decoration:underline;padding:0;font-size:13px}
+iframe.preview{width:100%;height:1000px;border:1px solid var(--rule);border-radius:6px;background:#F5F6F8}
 
-/* confirmation */
+footer{margin-top:30px;font-size:14px;color:var(--muted)}
+footer summary{cursor:pointer}
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--sheet);padding:10px 18px;border-radius:6px;font-weight:500;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;z-index:20;max-width:min(92vw,640px)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 @media (prefers-reduced-motion:reduce){.toast{transition:none}}
@@ -215,19 +227,17 @@ iframe.preview{width:100%;height:900px;border:1px solid var(--rule);border-radiu
 <body>
 <div class="wrap">
   <header class="top">
-    <div>
-      <nav class="pagenav" aria-label="Pages"><a href="/">Instructor emails</a><a aria-current="page" href="/manager">Manager analysis</a></nav>
-      <h1>Manager analysis</h1>
-      <p class="sub">Where to focus today by campus, subject and Capability Manager, the month so far, and the daily email. It compares; there are no fixed score cut-offs.</p>
-    </div>
+    <nav class="pagenav" aria-label="Pages"><a href="/">Instructor emails</a><a aria-current="page" href="/manager">University drill-down</a></nav>
+    <h1>University drill-down</h1>
+    <p class="sub" id="asof">Universities, their sections and classes, subjects and Capability Managers, from the daily BigQuery export, plus the daily email.</p>
   </header>
 
   <section class="drop" id="drop">
     <div id="dropIdle" class="hidden">
-      <h2>Drop today’s qa_exports zip here</h2>
-      <p>The <code>qa_exports_YYYYMMDD.zip</code> from <code>bash ~/bigquery/daily_cloudshell.sh</code>. You can also choose the four CSVs (qa_daily, manager_map, manager_connects, manager_activity) together.</p>
+      <h2>Drop today’s niat_drilldown_export.zip here</h2>
+      <p>The zip with the 13 files <code>01_universities.csv</code> … <code>13_tickets_month.csv</code> from the BigQuery export.</p>
       <label class="btn" for="fileInput">Choose file</label>
-      <input type="file" id="fileInput" accept=".zip,.csv,application/zip,text/csv" multiple>
+      <input type="file" id="fileInput" accept=".zip,application/zip">
       <p class="fine" id="storeNote">Processed on this server in memory and not stored. Contains instructor names: internal use only.</p>
     </div>
     <div class="loading" id="dropBusy" role="status" aria-live="polite"><span class="spin" aria-hidden="true"></span><b id="busyText">Loading…</b><span class="dim">This takes a few seconds.</span></div>
@@ -236,427 +246,553 @@ iframe.preview{width:100%;height:900px;border:1px solid var(--rule);border-radiu
 
   <section id="app" class="hidden">
     <div class="controls">
-      <div class="field"><label for="date">Report date</label><input type="date" id="date"></div>
-      <div class="field"><label for="month">Month view</label><input type="month" id="month"></div>
+      <div class="field"><label for="runDate">Export</label><select id="runDate"></select></div>
       <span class="sendstatus" id="sendStatus"></span>
-      <div class="filebar"><span id="fileName"></span><label class="btn ghost small" for="fileInput2" id="replaceLbl">Replace file</label>
-        <input type="file" id="fileInput2" accept=".zip,.csv,application/zip,text/csv" multiple></div>
+      <div class="filebar"><span id="fileName"></span><label class="btn ghost small" for="fileInput2">Upload new zip</label>
+        <input type="file" id="fileInput2" accept=".zip,application/zip"></div>
     </div>
     <div class="busyline hidden" id="busy" role="status"><span class="spin" aria-hidden="true"></span>Updating…</div>
     <div class="err hidden" id="err2" role="alert"></div>
-    <details class="checks" id="checks"></details>
-    <div class="figs" id="headline"></div>
-    <div class="tabs" role="tablist" id="tabs"></div>
-    <div id="view"></div>
+    <nav class="tabs" role="tablist" aria-label="View" id="tabs">
+      <button class="tab" role="tab" type="button" data-tab="uni">Universities</button>
+      <button class="tab" role="tab" type="button" data-tab="subj">Subjects</button>
+      <button class="tab" role="tab" type="button" data-tab="mgr">Managers</button>
+      <button class="tab" role="tab" type="button" data-tab="email">Daily email</button>
+    </nav>
+    <main id="view" class="view"></main>
+    <footer id="foot"></footer>
   </section>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
+/* ---------- basics ---------- */
 const $ = s => document.querySelector(s);
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-const WD = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-const dt = s => { const [y,m,d] = String(s).split("-").map(Number); return new Date(y, m-1, d); };
-const day = s => s ? `${dt(s).getDate()} ${MON[dt(s).getMonth()]}` : "no data";
-const wday = s => s ? `${WD[dt(s).getDay()]} ${day(s)}` : "no data";
-const n2 = v => v == null ? '<span class="dim">no data</span>' : Number(v).toFixed(2);
-const sg = v => v == null ? '<span class="dim">no data</span>' : (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(2);
-const pct = v => v == null ? '<span class="dim">no data</span>' : v + "%";
-let files = null, D = null, tab = "act", pickMgr = null, sendCfg = null, showAllSubj = false, saved = null;
-try { tab = localStorage.getItem("mgr.tab") || "act"; } catch (e) {}
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const nul = '<span class="null">null</span>';
+const val = v => v === null || v === undefined || v === '' ? nul : esc(v);
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const fmtD = d => d ? `${+d.slice(8, 10)} ${MON[+d.slice(5, 7) - 1]}` : '';
+const dLabel = d => `${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d + 'T00:00:00Z').getUTCDay()]} ${fmtD(d)}`;
+const addDays = (d, k) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + k); return x.toISOString().slice(0, 10); };
+const N = v => v === null || v === undefined ? nul : Number(v).toLocaleString('en-IN');
+const mins = m => m === null || m === undefined ? nul : (m >= 60 ? `${Math.floor(m / 60)}h ${String(Math.round(m % 60)).padStart(2, '0')}m` : `${Math.round(m)}m`);
+const pct = (a, b) => b ? Math.round(1000 * a / b) / 10 : null;
+const pctS = (a, b) => b ? `${pct(a, b)}%` : nul;
+const avg = (s, n) => n ? Math.round(s / n * 100) / 100 : null;
+const avgS = (s, n) => n ? `${avg(s, n)} <span class="t-muted">n=${n}</span>` : nul;
+const plural = (n, w, ws) => `${N(n)} ${n === 1 ? w : (ws || w + 's')}`;
+const titleCase = c => c.charAt(0) + c.slice(1).toLowerCase();
+const kpi = (l, v, n) => `<div class="kpi"><div class="l">${esc(l)}</div><div class="v">${v === null || v === undefined ? nul : v}</div>${n ? `<div class="n">${n}</div>` : ''}</div>`;
+const kv = rows => `<dl class="kv">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v === null || v === undefined ? nul : v}</dd>`).join('')}</dl>`;
+const chips = o => { const e = Object.entries(o).filter(x => x[1]); return e.length ? `<div class="chips">${e.sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span class="chip">${esc(k)} <b>${N(v)}</b></span>`).join('')}</div>` : nul; };
+const bar = (p) => p === null ? nul : `<div class="mini"><span>${p}%</span><span class="mtrack"><span style="width:${Math.min(100, p)}%"></span></span></div>`;
+const fold = (title, summary, body, open) => `<details class="fold"${open ? ' open' : ''}><summary><h3>${title}</h3>${summary ? `<span class="sum">${summary}</span>` : ''}</summary><div class="fb">${body}</div></details>`;
+const attnBox = (items, title = 'Needs attention') => { const o = { bad: 0, warn: 1, good: 2 }, L = items.slice().sort((a, b) => o[a[0]] - o[b[0]]);
+  return `<section class="attn" aria-label="${esc(title)}"><h3>${esc(title)}</h3><ul>${L.length ? L.map(([c, txt, d]) => `<li class="${c}">${d ? `<details class="ad"><summary><span>${txt}</span><span class="adt"><span class="s">Show</span><span class="h">Hide</span></span></summary><div class="adb">${d}</div></details>` : `<span>${txt}</span>`}</li>`).join('') : '<li class="good"><span>Nothing needs attention here.</span></li>'}</ul></section>`; };
+const names = (L, k = 4) => L.slice(0, k).map(esc).join(', ') + (L.length > k ? ` <span class="more">+${L.length - k} more</span>` : '');
 
-function toast(msg, ms = 3200) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), ms); }
-function showErr(where, msg) { const e = $(where); e.textContent = msg; e.classList.toggle("hidden", !msg); }
+/* ---------- dates ---------- */
+let D, U, I, CAPS, STATUS, ALLRUB, RUN, FROM, NEXT, THISWK, LASTWK, PREVWK, FROM7;  // set by setup() for each export
 
-// ------------------------------------------------------------------ upload
-async function run(first) {
-  const useSaved = saved && saved.configured;
-  if (!files && !(useSaved && (saved.has_data || D))) return;
-  const fd = new FormData();
-  const sending = files;
-  for (const f of files || []) fd.append("files", f, f.name);
-  $("#busyText").textContent = sending && useSaved ? "Saving the upload and building the analysis…"
-    : sending ? "Reading the export and building the analysis…" : "Opening the saved data…";
-  if (!first && !sending) { fd.append("report_date", $("#date").value); fd.append("month", $("#month").value); }
-  if (first) { $("#dropIdle").classList.add("hidden"); $("#dropBusy").classList.remove("hidden"); showErr("#err", ""); }
-  else { $("#busy").classList.remove("hidden"); showErr("#err2", ""); }
-  try {
-    const r = await fetch("/api/manager/analyze", {method: "POST", body: fd});
-    const j = await r.json().catch(() => ({error: `The server answered ${r.status}.`}));
-    if (!r.ok || j.error) throw new Error(j.error || `The server answered ${r.status}.`);
-    D = j;
-    if (j.db) {
-      files = null; saved.has_data = true;
-      if (j.saved) toast(`Saved ${sending.map(f => f.name).join(", ")}: ${j.saved.added.toLocaleString()} rows added, ${j.saved.removed.toLocaleString()} removed. Kept: ${day(j.saved.cutoff)} – ${day(j.saved.latest_qa)}.`, 6000);
-    }
-    if (!pickMgr || !D.managers.includes(pickMgr)) pickMgr = D.managers[0] || null;
-    $("#drop").classList.add("hidden"); $("#app").classList.remove("hidden");
-    render();
-  } catch (e) {
-    if (first) { $("#dropIdle").classList.remove("hidden"); showErr("#err", e.message); }
-    else showErr("#err2", e.message);
-  } finally {
-    $("#dropBusy").classList.add("hidden"); $("#busy").classList.add("hidden");
+/* Semester progress from the schedule (file 04): each session's own date vs the run date. No semester end date is used. */
+const schOf = rows => { const t = { total: 0, sched: 0, done: 0, gap: 0, later: 0, nodate: 0, pend: 0, started: 0, notmarked: 0 };
+  rows.forEach(r => { const n = r.n || 0, done = r.st === 'COMPLETED' || r.st === 'PARTIALLY_COMPLETED'; t.total += n;
+    if (!r.st) t.nodate += n; else if (r.due) { t.sched += n; if (done) t.done += n; else { t.gap += n; if (r.st === 'PENDING') t.pend += n; else if (r.st === 'STARTED') t.started += n; else t.notmarked += n; } } else { t.later += n; if (done) t.done += n; } });
+  return t; };
+const gapTip = c => `Pending ${c.pend}, started ${c.started}, not marked ${c.notmarked}`;
+const gapCell = c => c.gap ? `<span class="pill bad" title="${gapTip(c)}">${N(c.gap)}</span>` : '0';
+const DONE_S = `Done = Completed or Partly completed. Not marked done = the session's date in the schedule is on or before ${fmtD(RUN)} but it is still Pending, Started or Not marked. No date yet = in the semester's session list but not given a date. There is no semester end date in this data.`;
+/* ---------- unpack ---------- */
+const unpack = (kind, rows) => (rows || []).map(r => { const o = {}; D.cols[kind].forEach((c, i) => { o[c] = r[i]; }); return o; });
+function unpackAll(){
+  U = D.universities;
+U.forEach(u => { u.sections.forEach(s => { s.days = unpack('days', s.days); s.att = unpack('att', s.att); s.fb = unpack('fb', s.fb); s.cur = unpack('cur', s.cur); });
+  u.attn = unpack('attn', u.attn); u.qaw = unpack('qaw', u.qaw); u.tickets = unpack('tickets', u.tickets);
+  u.st = u.status.map(r => ({ sid: r[0], sname: r[1], sem: r[2], sub: r[3], st: r[4], due: r[5], n: r[6] || 0 }));
+  u.sections.forEach(s => { const L = u.st.filter(r => s.id ? r.sid === s.id : r.sname === s.label); s.sch = L.length ? schOf(L) : null; });
+  const g = {}; u.st.forEach(r => { (g[r.sid || r.sname] = g[r.sid || r.sname] || []).push(r); });
+  u.schSecs = Object.values(g).map(L => { const i = u.sections.findIndex(s => s.id ? s.id === L[0].sid : s.label === L[0].sname); return { label: L[0].sname, sem: L[0].sem || 'No semester', c: schOf(L), i, batch: i >= 0 ? u.sections[i].batch : null }; });
+  const bm = {}; u.schSecs.forEach(o => { if (o.batch) (bm[o.sem] = bm[o.sem] || new Set()).add(o.batch); }); u.batchOf = sem => { const L = bm[sem] ? [...bm[sem]] : []; return !L.length ? nul : L.length > 2 ? `<span title="${esc(L.join(', '))}">${L.length} batches</span>` : esc(L.join(', ')); }; });
+}
+
+/* ---------- sums ---------- */
+const DK = ['classes','completed','partially_completed','pending','cancelled','skipped','other_status','lecture','practice','exam','break_type','other_type','offline','online','merged','span_mins','class_mins','with_recording_info','recorded','no_recording','evaluated','recorded_not_evaluated','qa_sum','qa_n','perf_sum','perf_n','grooming_sum','grooming_n','zero_qa','report_known','report_opened','flagged','malpractice'];
+const sumBy = (rows, keys) => { const t = { rows: rows.length }; keys.forEach(k => { t[k] = rows.reduce((a, r) => a + (r[k] || 0), 0); }); return t; };
+const sumDays = days => sumBy(days, DK);
+const sumAtt = rows => sumBy(rows, ['records','submitted','present','absent','not_submitted','by_face_recognition','by_manual']);
+const sumFb = rows => sumBy(rows, ['responses','understanding_sum','understanding_n','teaching_sum','teaching_n','guidance_sum','guidance_n','positive','neutral','negative']);
+const curOf = rows => { const t = { planned: 0, due: 0, done: 0 }; rows.forEach(c => { t.planned += c.planned || 0; t.due += c.due_by_today || 0; t.done += (c.completed || 0) + (c.partially_completed || 0); }); t.behind = Math.max(0, t.due - t.done); return t; };
+const active = u => u.sections.filter(s => s.days.length);
+const OPEN_T = ['Yet To Pick', 'In Progress', 'Awaiting Instructors Response', 'Awaiting Instructor Response', 'Re-open'];
+const RED_FLAGS = ['no_recording', 'recorded_not_evaluated', 'pending_after_date', 'malpractice', 'flagged', 'zero_qa'];
+const redCount = rows => rows.reduce((a, r) => a + RED_FLAGS.filter(k => r[k]).length, 0);
+const statusChips = t => chips({ Completed: t.completed, 'Partly completed': t.partially_completed, Pending: t.pending, Cancelled: t.cancelled, Skipped: t.skipped, Other: t.other_status });
+const typeChips = t => chips({ Lecture: t.lecture, Practice: t.practice, Exam: t.exam, Break: t.break_type, Other: t.other_type });
+
+const uniAgg = u => { if (u._a) return u._a; const days = u.sections.flatMap(s => s.days), act = active(u);
+  const a = { t: sumDays(days), act, plan: act.filter(s => s.next), at: sumAtt(u.sections.flatMap(s => s.att)), fb: sumFb(u.sections.flatMap(s => s.fb)),
+    sch: schOf(u.st),
+    tk: u.tickets.reduce((x, r) => x + (r.tickets || 0), 0), tkOpen: u.tickets.filter(r => OPEN_T.includes(r.ticket_status)).reduce((x, r) => x + (r.tickets || 0), 0),
+    red7: redCount(u.attn) };
+  a.gapSecs = u.schSecs.filter(o => o.c.gap > 0);
+  return (u._a = a); };
+
+/* ---------- instructors / managers ---------- */
+const capsOf = i => (i.managers || '').split(', ').filter(m => CAPS.some(c => c.toLowerCase() === m.toLowerCase()));
+const teachesAt = u => I.filter(i => (i.taught_at || '').split(', ').includes(u.name));
+
+/* ---------- rubrics ---------- */
+const RN = { 'curriculum alignment and content accuracy': 'Curriculum alignment', 'pedagogical quality': 'Pedagogical quality', 'language': 'Language', 'student engagement': 'Student engagement',
+  'professional conduct and ethics': 'Professional conduct', 'doubt resolution and practice session facilitation': 'Doubt resolution', 'student engagement and independence': 'Engagement & independence', 'process adherence': 'Process adherence' };
+const LEC = Object.keys(RN).slice(0, 5), PRA = Object.keys(RN).slice(5, 7);
+const rubAgg = (rows, cat) => { const m = {}; rows.forEach(([sub, rb, s, n]) => { if (cat !== 'ALL' && sub !== cat) return; const a = m[rb] = m[rb] || [0, 0]; a[0] += s || 0; a[1] += n || 0; });
+  const o = {}; for (const k in m) if (m[k][1]) o[k] = { avg: avg(m[k][0], m[k][1]), n: m[k][1] }; return o; };
+const weakest = (r, ks) => ks.filter(k => r[k]).sort((a, b) => r[a].avg - r[b].avg)[0] || null;
+const rubBars = r => { const ks = Object.keys(RN).filter(k => r[k]); if (!ks.length) return '<p class="empty">No rubric scores in the last 8 weeks.</p>';
+  return `<div class="scroll"><table><thead><tr><th>Rubric</th><th>Used for</th><th class="num">Average</th><th class="num">Scores</th></tr></thead><tbody>${ks.map(k => `<tr><td>${RN[k]}</td><td>${LEC.includes(k) ? 'Lecture' : k === 'process adherence' ? 'English' : 'Practice'}</td><td class="num">${r[k].avg}</td><td class="num">${N(r[k].n)}</td></tr>`).join('')}</tbody></table></div>`; };
+
+/* ---------- state ---------- */
+const state = { tab: 'uni', u: null, s: null, m: null, cat: 'ALL', q: '', day: {} };
+const go = patch => { Object.assign(state, patch); render(); window.scrollTo({ top: 0 }); };
+
+
+/* ---------- instructor QA over each instructor's last 3 QA days (file 11) ---------- */
+const capLabel = i => { const c = capsOf(i); return c.length ? c.map(esc).join(', ') : 'no capability manager'; };
+const q3Days = i => (i.qa_last3_days || '').split(' | ').map(x => x.slice(0, 10)).filter(Boolean);
+const qDays = i => q3Days(i).map(d => d.slice(0, 4) === RUN.slice(0, 4) ? fmtD(d) : `${fmtD(d)} ${d.slice(0, 4)}`).join(', ');
+const hasQ3 = i => i.qa_last3_avg !== null && i.qa_last3_avg !== undefined && i.qa_last3_n;
+function instQTable(L, withUni){
+  return `<div class="scroll lag"><table><thead><tr><th class="num">#</th><th>Instructor</th><th class="num">QA</th><th class="num">n</th>${withUni ? '<th>Taught at, 14 days</th>' : ''}<th>Subject</th><th>Capability manager</th><th>Last 3 QA days</th></tr></thead><tbody>${L.map((i, k) => `<tr><td class="num">${k + 1}</td><td>${esc(i.instructor_name || 'Unnamed')}</td><td class="num">${i.qa_last3_avg}</td><td class="num">${i.qa_last3_n}</td>${withUni ? `<td>${i.taught_at ? esc(i.taught_at) : '<span class="null">no session</span>'}</td>` : ''}<td>${val(i.category)}</td><td>${capLabel(i)}</td><td style="white-space:nowrap">${qDays(i)}</td></tr>`).join('')}</tbody></table></div>`;
+}
+const Q3NOTE = `QA = the instructor's average over their own last 3 days with a QA score (recorded, evaluated lecture and practice sessions), across all universities they teach at. n = number of QA scores in those days.`;
+function qaItems(list, withUni){
+  const out = [], all = list.filter(hasQ3);
+  const low = list.filter(i => i.status === 'ACTIVE' && hasQ3(i) && i.qa_last3_avg < 5).sort((a, b) => a.qa_last3_avg - b.qa_last3_avg || b.qa_last3_n - a.qa_last3_n);
+  if (low.length) out.push(['bad', `<b>${low.length}</b> active instructor${low.length === 1 ? ' is' : 's are'} below 5 QA`, instQTable(low, withUni) + `<p class="note">${Q3NOTE} Lowest first.</p>`]);
+  const top = all.filter(i => i.taught_at).sort((a, b) => b.qa_last3_avg - a.qa_last3_avg || b.qa_last3_n - a.qa_last3_n).slice(0, 2);
+  if (top.length) out.push(['good', `Highest QA: ${top.map(i => `<b>${esc(i.instructor_name || 'Unnamed')}</b> ${i.qa_last3_avg}`).join(', ')}`, instQTable(top, withUni) + `<p class="note">${Q3NOTE} Only instructors who taught in the last 14 days.</p>`]);
+  return out;
+}
+const simpleList = L => `<div class="chips">${L.join('')}</div>`;
+/* =============== UNIVERSITIES: layer 1 =============== */
+function orgView(){
+  const L = U.map(u => ({ u, a: uniAgg(u) })), live = L.filter(o => o.a.act.length), idle = L.filter(o => !o.a.act.length);
+  const t = sumDays(U.flatMap(u => u.sections.flatMap(s => s.days))), at = sumAtt(U.flatMap(u => u.sections.flatMap(s => s.att)));
+  const act = live.reduce((x, o) => x + o.a.act.length, 0), plan = live.reduce((x, o) => x + o.a.plan.length, 0);
+  const none = live.filter(o => !o.a.plan.length), gapSecs = L.flatMap(o => o.a.gapSecs), gapAll = gapSecs.reduce((x, o) => x + o.c.gap, 0);
+  const items = [], uniBtn = u => `<button type="button" class="chip ulink" data-uni="${U.indexOf(u)}">${esc(u.name)}</button>`;
+  const noToday = live.filter(o => !o.u.sections.some(s => s.days.some(d => d.day === RUN && d.classes)));
+  if (noToday.length) {
+    const rows = noToday.map(o => ({ o, last: o.u.sections.flatMap(s => s.days.filter(d => d.classes).map(d => d.day)).sort().pop(), r: RS[o.u.name] }))
+      .sort((x, y) => (!!x.r - !!y.r) || (x.last || '').localeCompare(y.last || ''));
+    const unk = rows.filter(x => !x.r).length;
+    const txt = unk ? `<b>${unk}</b> of ${live.length} universities have no session today (${dLabel(RUN)})${unk < rows.length ? ` <span class="more">+${rows.length - unk} with a known reason</span>` : ''}`
+      : `No session today at ${plural(rows.length, 'university', 'universities')}, all with a known reason`;
+    items.push([unk ? 'warn' : 'good', txt, `<div class="scroll lag"><table><thead><tr><th>University</th><th class="num">Last session</th><th class="num">Sections planned for ${fmtD(NEXT)}</th>${OPTS.length ? '<th>Reason</th>' : ''}</tr></thead><tbody>${rows.map(({ o, last, r }) => `<tr class="go${r ? ' known' : ''}" tabindex="0" data-uni="${U.indexOf(o.u)}"><td>${esc(o.u.name)}</td><td class="num">${last ? dLabel(last) : nul}</td><td class="num">${o.a.plan.length} of ${o.a.act.length}</td>${OPTS.length ? `<td>${reasonBox(o.u.name, r)}</td>` : ''}</tr>`).join('')}</tbody></table></div><p class="note">Universities that had at least one session in the last 14 days but none dated ${fmtD(RUN)} in the schedule, whatever its status. Oldest last session first.${OPTS.length ? ' Set a reason (exams, holiday…) to leave a university out of the daily email; it clears itself when its classes resume.' : ''}</p>`]);
   }
+  if (none.length) items.push(['bad', `<b>${none.length}</b> universities have nothing planned for ${dLabel(NEXT)}`, simpleList(none.map(o => uniBtn(o.u)))]);
+  const some = live.filter(o => o.a.plan.length && o.a.plan.length < o.a.act.length);
+  if (some.length) items.push(['warn', `<b>${some.length}</b> universities have only some sections planned for ${dLabel(NEXT)}`, `<div class="scroll lag"><table><thead><tr><th>University</th><th class="num">Sections planned</th></tr></thead><tbody>${some.sort((x, y) => x.a.plan.length / x.a.act.length - y.a.plan.length / y.a.act.length).map(o => `<tr class="go" tabindex="0" data-uni="${U.indexOf(o.u)}"><td>${esc(o.u.name)}</td><td class="num">${o.a.plan.length} of ${o.a.act.length}</td></tr>`).join('')}</tbody></table></div>`]);
+  if (gapSecs.length) {
+    const G = {}; L.forEach(o => o.u.schSecs.forEach(({ sem, c }) => { const k = o.u.name + '|' + sem; const g = G[k] = G[k] || { u: o.u, sem, secs: 0, gs: 0, gap: 0, nodate: 0, sched: 0 }; g.secs++; g.sched += c.sched; g.nodate += c.nodate; if (c.gap) { g.gs++; g.gap += c.gap; } }));
+    const lag = Object.values(G).filter(g => g.gap).sort((x, y) => y.gap - x.gap);
+    items.push(['bad', `<b>${N(gapAll)}</b> sessions scheduled till ${fmtD(RUN)} are not marked done`, `<div class="scroll lag"><table><thead><tr><th>University</th><th>Semester</th><th>Batch</th><th class="num">Sections affected</th><th class="num">Scheduled till ${fmtD(RUN)}</th><th class="num">Not marked done</th><th class="num">No date yet</th></tr></thead><tbody>${lag.map(g => `<tr class="go" tabindex="0" data-uni="${U.indexOf(g.u)}"><td>${esc(g.u.name)}</td><td style="white-space:nowrap">${esc(g.sem.replace('Semester ', 'Sem '))}</td><td>${g.u.batchOf(g.sem)}</td><td class="num">${g.gs} of ${g.secs}</td><td class="num">${N(g.sched)}</td><td class="num"><span class="pill bad">${N(g.gap)}</span></td><td class="num">${N(g.nodate)}</td></tr>`).join('')}</tbody></table></div>
+      <p class="note">Current semester of each batch only. Each session is checked against its own date in the schedule; there is no semester end date in this data. No date yet = sessions in the semester's list without a date.</p>`]);
+  }
+  items.push(...qaItems(I, true));
+  return `<div class="head"><h2>All universities</h2><div class="sub">${live.length} of ${U.length} universities had classes from ${fmtD(FROM)} to ${fmtD(RUN)}. Open one to see its sections.</div></div>
+  <div class="kpis">${kpi('Sections teaching', N(act), `in ${live.length} universities`)}${kpi('Classes, 14 days', N(t.classes), `${N(t.completed)} completed`)}${kpi('Recorded', pctS(t.recorded, t.with_recording_info), `${N(t.recorded)} of ${N(t.with_recording_info)}`)}
+    ${kpi('Avg QA score', avg(t.qa_sum, t.qa_n), `n=${N(t.qa_n)}`)}${kpi('Attendance present', pctS(at.present, at.submitted), `of ${N(at.submitted)} submitted records`)}${kpi(`Planned for ${fmtD(NEXT)}`, `${N(plan)}/${N(act)}`, 'sections')}</div>
+  ${attnBox(items)}
+  <section class="card"><div class="ch"><h3>Universities</h3><input class="search" id="q" type="search" placeholder="Find a university" aria-label="Find a university" value="${esc(state.q)}"></div>
+    <div class="cb scroll"><table><thead><tr><th>University</th><th class="num">Sections</th><th class="num">Classes</th><th class="num">Recorded</th><th class="num">Avg QA</th><th class="num">Attendance</th><th class="num">${fmtD(NEXT)}</th><th class="num">Not marked done</th><th class="num">Issues, 7 days</th></tr></thead><tbody id="unirows">${uniRows(live)}</tbody></table></div>
+    <div class="cb"><p class="note">Classes, recorded, QA and attendance cover the last 14 days. ${fmtD(NEXT)} = sections with at least one class planned tomorrow. Not marked done = this semester's sessions dated on or before ${fmtD(RUN)} that are not Completed or Partly completed. Issues = classes in the last 7 days with no recording, no QA evaluation, a zero score, a flag, malpractice or still pending after their date.</p></div></section>
+  ${idle.length ? fold('No classes in the last 14 days', plural(idle.length, 'university', 'universities'), `<p style="margin:0">${idle.map(o => esc(o.u.name)).join(', ')}</p>`) : ''}`;
 }
-function takeFiles(list) {
-  if (!list || !list.length) return;
-  files = Array.from(list); $("#fileName").textContent = files.map(f => f.name).join(", ");
-  run(!D);
+function uniRows(live){
+  const q = state.q.trim().toLowerCase();
+  const L = live.filter(o => !q || o.u.name.toLowerCase().includes(q));
+  if (!L.length) return `<tr><td colspan="9" class="null">No university matches "${esc(state.q)}"</td></tr>`;
+  return L.map(({ u, a }) => { const p = a.plan.length, n = a.act.length;
+    return `<tr class="go" tabindex="0" data-uni="${U.indexOf(u)}"><td>${esc(u.name)}</td><td class="num">${n}</td><td class="num">${N(a.t.classes)}</td><td class="num">${pctS(a.t.recorded, a.t.with_recording_info)}</td><td class="num">${avg(a.t.qa_sum, a.t.qa_n) ?? nul}</td><td class="num">${pctS(a.at.present, a.at.submitted)}</td>
+      <td class="num"><span class="pill ${p === n ? 'good' : p ? 'warn' : 'bad'}">${p}/${n}</span></td><td class="num">${a.sch.total ? gapCell(a.sch) : nul}</td><td class="num">${a.red7 ? `<span class="pill bad">${a.red7}</span>` : '0'}</td></tr>`; }).join('');
 }
-$("#fileInput").addEventListener("change", e => takeFiles(e.target.files));
-$("#fileInput2").addEventListener("change", e => { if (!(saved && saved.configured)) D = null; takeFiles(e.target.files); e.target.value = ""; });
-const drop = $("#drop");
-["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
-["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
-drop.addEventListener("drop", e => takeFiles(e.dataTransfer.files));
-$("#date").addEventListener("change", () => run(false));
-$("#month").addEventListener("change", () => run(false));
 
-// The page starts on "Loading…" and shows the upload box only when nothing is saved
-function showUpload() { if (!D && !files) { $("#dropBusy").classList.add("hidden"); $("#dropIdle").classList.remove("hidden"); } }
-fetch("/api/manager/saved").then(r => r.json()).then(j => {
-  saved = j;
-  if (!(j.configured && j.has_data && !j.error)) showUpload();
-  if (!j.configured) { if (j.error) $("#storeNote").textContent = `Saving is off: ${j.error} Check the Turso settings in Render.`; return; }
-  $("#replaceLbl").textContent = "Upload new zip";
-  $("#fileName").textContent = "Saved data";
-  $("#storeNote").textContent = j.error ? `The database isn’t reachable: ${j.error}`
-    : `Saved to the database: each upload replaces the days it covers, and only the last ${j.keep_days} days are kept. Contains instructor names: internal use only.`;
-  if (j.has_data && !j.error && !files) run(true);
-}).catch(showUpload);
-
-fetch("/api/status").then(r => r.json()).then(j => {
-  sendCfg = j.send || null;
-  const s = sendCfg;
-  if (!s || !s.configured) { $("#sendStatus").innerHTML = '<span class="dot off"></span>Sending isn’t set up: use Copy HTML'; return; }
-  const mode = {dryrun: "dry run (nothing is sent)", test: `test mode (only ${esc(s.test_to)})`, live: "live"}[s.mode] || s.mode;
-  $("#sendStatus").innerHTML = `<span class="dot ${s.mode === "live" ? "on" : "test"}"></span>Send: ${esc(s.provider_name)} · ${mode}`;
-}).catch(() => {});
-
-// ------------------------------------------------------------------ render
-const TABS = [["act","Act on these today"],["campus","Campus analysis"],["connects","Manager connect usage"],["detail","Manager detail"],["month","Month view"],["email","Daily email"]];
-function render() {
-  $("#date").value = D.report_date; $("#date").max = D.latest_date;
-  $("#month").value = D.month; $("#month").max = D.latest_date.slice(0, 7);
-  const checks = [...D.bundle.checks, ...D.checks];
-  const warns = checks.filter(c => c.level === "warn").length;
-  const range = D.bundle.ranges && D.bundle.ranges.qa_daily;
-  const wasOpen = $("#checks").open;
-  $("#checks").innerHTML = `<summary><span>Data ${range && range.from ? `from <b>${day(range.from)}</b> to <b>${day(range.to)}</b>` : "checks"}</span>${warns ? `<span class="warnc">${warns} warning${warns > 1 ? "s" : ""} to review</span>` : ""}</summary>`
-    + checks.map(c => `<div class="check ${c.level}">${esc(c.text)}</div>`).join("");
-  $("#checks").open = wasOpen;
-  const h = D.headline;
-  const fig = (k, v, s) => `<div class="fig"><div class="k">${k}</div><div class="v">${v}</div>${s ? `<div class="s">${s}</div>` : ""}</div>`;
-  $("#headline").innerHTML = fig("Campuses taught", `${h.taught} of ${h.campuses}`, wday(D.report_date))
-    + fig("Lecture and practice sessions", h.sessions.toLocaleString(), "")
-    + fig("With a QA report", `${h.coverage ?? "no data"}${h.coverage == null ? "" : "%"}`, `${h.with_qa.toLocaleString()} sessions`)
-    + fig("Average score", n2(h.avg), `${h.scored.toLocaleString()} evaluations; ${n2(h.avg_p7)} the 7 days before`);
-  $("#tabs").innerHTML = TABS.map(([k, l]) => `<button class="tab" role="tab" aria-selected="${k === tab}" data-tab="${k}">${l}</button>`).join("");
-  $("#tabs").querySelectorAll(".tab").forEach(b => b.onclick = () => { tab = b.dataset.tab; try { localStorage.setItem("mgr.tab", tab); } catch (e) {} render(); });
-  const fn = {act: vAct, campus: vCampus, connects: vConnects, detail: vDetail, month: vMonth, email: vEmail}[tab] || vAct;
-  $("#view").innerHTML = ""; fn($("#view"));
+/* =============== UNIVERSITIES: layer 2 =============== */
+function uniView(u){
+  const a = uniAgg(u), t = a.t, notPlanned = a.act.filter(s => !s.next), T = teachesAt(u);
+  const items = [];
+  if (RS[u.name]) items.push(['good', `No session today: ${esc(RS[u.name].reason)}${RS[u.name].note ? ` (${esc(RS[u.name].note)})` : ''}, so it is left out of the daily email until classes resume`]);
+  if (notPlanned.length) items.push(['bad', `<b>${notPlanned.length}</b> of ${a.act.length} sections have nothing planned for ${dLabel(NEXT)}`, simpleList(notPlanned.map(s => `<button type="button" class="chip ulink" data-sec="${u.sections.indexOf(s)}">${esc(s.label)}</button>`))]);
+  if (a.gapSecs.length) items.push(['bad', `<b>${N(a.sch.gap)}</b> sessions scheduled till ${fmtD(RUN)} are not marked done, in ${plural(a.gapSecs.length, 'section')}`, `<div class="scroll lag"><table><thead><tr><th>Section</th><th>Semester</th><th class="num">Scheduled till ${fmtD(RUN)}</th><th class="num">Not marked done</th><th class="num">No date yet</th></tr></thead><tbody>${a.gapSecs.slice().sort((x, y) => y.c.gap - x.c.gap).map(o => `<tr${o.i >= 0 ? ` class="go" tabindex="0" data-sec="${o.i}"` : ''}><td>${esc(o.label)}</td><td>${esc(o.sem)}</td><td class="num">${N(o.c.sched)}</td><td class="num">${gapCell(o.c)}</td><td class="num">${N(o.c.nodate)}</td></tr>`).join('')}</tbody></table></div><p class="note">Each session is checked against its own date in the schedule; there is no semester end date in this data.</p>`]);
+  if (t.no_recording) items.push(['bad', `<b>${N(t.no_recording)}</b> classes with no recording, last 14 days`]);
+  if (t.zero_qa) items.push(['bad', `<b>${N(t.zero_qa)}</b> zero QA scores, last 14 days`]);
+  if (t.recorded_not_evaluated) items.push(['warn', `<b>${N(t.recorded_not_evaluated)}</b> recorded classes not QA-evaluated`]);
+  if (a.at.not_submitted) items.push(['warn', `<b>${N(a.at.not_submitted)}</b> of ${N(a.at.records)} attendance records not submitted`]);
+  if (a.fb.negative) items.push(['warn', `<b>${N(a.fb.negative)}</b> negative feedback responses, last 14 days`]);
+  if (a.tkOpen) items.push(['warn', `<b>${N(a.tkOpen)}</b> support tickets still open this month`]);
+  items.push(...qaItems(T, false));
+  const rub = rubAgg(u.rub, 'ALL'), cu = a.sch;
+  const secRows = u.sections.map((s, i) => { const st = sumDays(s.days), sa = sumAtt(s.att), c = s.sch, r7 = redCount(u.attn.filter(x => x.section_name === s.label));
+    return `<tr class="go" tabindex="0" data-sec="${i}"><td>${esc(s.label)}</td><td>${val(s.semester)}</td><td class="num">${N(st.classes)}</td><td class="num">${pctS(st.recorded, st.with_recording_info)}</td><td class="num">${avg(st.qa_sum, st.qa_n) ?? nul}</td><td class="num">${pctS(sa.present, sa.submitted)}</td>
+      <td class="num">${s.next ? `<span class="pill good">${s.next.classes} from ${esc(s.next.first)}</span>` : s.days.length ? '<span class="pill bad">none</span>' : nul}</td><td class="num">${c && c.total ? bar(pct(c.done, c.total)) : nul}</td><td class="num">${c ? gapCell(c) : nul}</td><td class="num">${r7 ? `<span class="pill bad">${r7}</span>` : '0'}</td></tr>`; }).join('');
+  const bySub = {}; u.st.forEach(r => { (bySub[r.sub || 'No subject'] = bySub[r.sub || 'No subject'] || []).push(r); });
+  return crumbs([['Universities', { u: null, s: null }], [u.name]]) +
+  `<div class="head"><h2>${esc(u.name)}</h2><div class="sub">${[u.type, u.location].filter(Boolean).map(esc).join(' · ')}</div></div>
+  <div class="kpis">${kpi('Sections teaching', `${a.act.length}`, `of ${u.sections_total ?? 'null'} sections`)}${kpi('Students', N(u.students))}${kpi('Classes, 14 days', N(t.classes), `${N(t.completed)} completed`)}${kpi('Recorded', pctS(t.recorded, t.with_recording_info), `${N(t.recorded)} of ${N(t.with_recording_info)}`)}
+    ${kpi('Avg QA score', avg(t.qa_sum, t.qa_n), `n=${N(t.qa_n)}`)}${kpi('Attendance present', pctS(a.at.present, a.at.submitted), `of ${N(a.at.submitted)} submitted`)}${kpi(`Planned for ${fmtD(NEXT)}`, a.act.length ? `${a.plan.length}/${a.act.length}` : null, 'sections')}${kpi('Semester sessions done', cu.total ? pct(cu.done, cu.total) + '%' : null, cu.total ? `${N(cu.done)} of ${N(cu.total)} in the schedule` : 'no schedule')}</div>
+  ${attnBox(items)}
+  <section class="card"><div class="ch"><h3>Sections</h3><span class="sub">Open a section for its days, classes, attendance and curriculum.</span></div>
+    <div class="cb scroll">${u.sections.length ? `<table><thead><tr><th>Section</th><th>Semester</th><th class="num">Classes</th><th class="num">Recorded</th><th class="num">Avg QA</th><th class="num">Attendance</th><th class="num">${fmtD(NEXT)}</th><th class="num">Semester done</th><th class="num">Not marked done</th><th class="num">Issues, 7 days</th></tr></thead><tbody>${secRows}</tbody></table>` : '<p class="empty">No section data.</p>'}</div></section>
+  ${fold('Daily summary', 'what went wrong each day, last 7 days', dailySummary(u))}
+  ${fold('Instructors', `${plural(T.length, 'instructor')} taught here in 14 days`, instTable(T, u))}
+  ${fold('Semester progress by subject', cu.total ? `${pct(cu.done, cu.total)}% of the semester done, ${N(cu.gap)} not marked done` : 'no schedule', Object.keys(bySub).length ? progTable(Object.entries(bySub).map(([k, L]) => [esc(k), schOf(L)]), 'Subject') + `<p class="note">${DONE_S}</p>` : '<p class="empty">No schedule for the current semester.</p>')}
+  ${fold('QA and rubrics', t.qa_n ? `avg ${avg(t.qa_sum, t.qa_n)}, n=${N(t.qa_n)}` : 'no QA scores', `<div class="cols">${kv([['QA-evaluated classes', N(t.evaluated)], ['Avg QA score', avgS(t.qa_sum, t.qa_n)], ['Avg performance', avgS(t.perf_sum, t.perf_n)], ['Avg grooming', avgS(t.grooming_sum, t.grooming_n)], ['Zero QA scores', N(t.zero_qa)], ['QA report opened', t.report_known ? `${N(t.report_opened)} of ${N(t.report_known)}` : nul], ['Flagged', N(t.flagged)], ['Malpractice', N(t.malpractice)]])}<div>${rubBars(rub)}</div></div><p class="note">QA numbers: last 14 days. Rubrics: last 8 weeks.</p>`)}
+  ${fold('Students', `${N(u.students)} students`, `<div class="cols">${kv([['Attendance records', N(a.at.records)], ['Submitted', N(a.at.submitted)], ['Present', a.at.submitted ? `${N(a.at.present)} (${pct(a.at.present, a.at.submitted)}%)` : nul], ['Not submitted', N(a.at.not_submitted)], ['By face recognition', N(a.at.by_face_recognition)]])}${kv([['Feedback responses', N(a.fb.responses)], ['Understanding (1–5)', avgS(a.fb.understanding_sum, a.fb.understanding_n)], ['Teaching quality (1–5)', avgS(a.fb.teaching_sum, a.fb.teaching_n)], ['Guidance clarity (1–5)', avgS(a.fb.guidance_sum, a.fb.guidance_n)], ['Positive / neutral / negative', `${N(a.fb.positive)} / ${N(a.fb.neutral)} / ${N(a.fb.negative)}`]])}</div><p class="note">Last 14 days. Feedback is voluntary, so responses are not attendance.</p>`)}
+  ${fold('Support tickets', `${N(a.tk)} this month, ${N(a.tkOpen)} open`, a.tk ? `<div class="cols">${kv([['Raised this month', N(a.tk)], ['Open', N(a.tkOpen)], ['Oldest open since', (() => { const d = u.tickets.map(r => r.oldest_open_created).filter(Boolean).sort()[0]; return d ? fmtD(d) : nul; })()]])}<div class="chips" style="align-content:start">${Object.entries(u.tickets.reduce((o, r) => { const k = r.sub_category || r.category || 'No issue type'; o[k] = (o[k] || 0) + r.tickets; return o; }, {})).sort((x, y) => y[1] - x[1]).map(([k, v]) => `<span class="chip">${esc(k)} <b>${v}</b></span>`).join('')}</div></div><p class="note">Created from ${fmtD(RUN.slice(0, 8) + '01')} to ${fmtD(RUN)}. Open = Yet To Pick, In Progress, Awaiting Instructors Response or Re-open.</p>` : '<p class="empty">No tickets this month.</p>')}`;
 }
-const table = (heads, rows, id) => `<div class="tbl"${id ? ` id="${id}"` : ""}><table><thead><tr>${heads.map(h => `<th class="${h[1] || ""}">${h[0]}</th>`).join("")}</tr></thead><tbody>${rows.join("") || `<tr><td colspan="${heads.length}" class="dim">Nothing to show.</td></tr>`}</tbody></table></div>`;
-const pill = (t, c) => `<span class="pill ${c}">${esc(t)}</span>`;
-
-// campus reasons: saved to the database, then the analysis re-runs
-async function saveReason(box) {
-  const sel = box.querySelector("select"), note = box.querySelector("input");
-  try {
-    const r = await fetch("/api/manager/reason", {method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({campus: box.dataset.campus, reason: sel.value, note: sel.value ? note.value : "", report_date: D.report_date})});
-    const j = await r.json().catch(() => ({error: `The server answered ${r.status}.`}));
-    if (!r.ok || j.error) throw new Error(j.error);
-    toast(sel.value ? `${box.dataset.campus}: ${sel.value}. Left out of the email.` : `${box.dataset.campus}: reason cleared. It’s a follow-up again.`);
-    await run(false);
-  } catch (e) { toast("Couldn’t save the reason: " + e.message, 6000); }
+function instTable(L, u){
+  if (!L.length) return '<p class="empty">No instructor taught here in the last 14 days.</p>';
+  return `<div class="scroll"><table><thead><tr><th>Instructor</th><th>Subject</th><th class="num">Sessions, 14 days</th><th class="num">QA, last 3 QA days</th><th class="num">Zero QA, 14 days</th><th class="num">Last completed 1:1</th></tr></thead><tbody>${L.slice().sort((x, y) => (y.sessions_14d || 0) - (x.sessions_14d || 0)).map(i => `<tr><td>${val(i.instructor_name)}</td><td>${val(i.category)}</td><td class="num">${N(i.sessions_14d ?? 0)}</td><td class="num">${i.qa_last3_avg ?? nul}</td><td class="num">${i.zero_qa_14d ? `<span class="pill bad">${i.zero_qa_14d}</span>` : '0'}</td><td class="num">${i.last_completed_connect ? `<span class="pill ${i.last_completed_connect >= LASTWK ? 'good' : 'warn'}">${fmtD(i.last_completed_connect)}</span>` : nul}</td></tr>`).join('')}</tbody></table></div>
+  <p class="note">Sessions anywhere in the last 14 days. QA = average of the instructor's last 3 days with a QA score. Green 1:1 = since ${fmtD(LASTWK)}.</p>`;
 }
-document.addEventListener("change", e => {
-  const box = e.target.closest && e.target.closest(".reason");
-  if (box) saveReason(box);
+function dailySummary(u){
+  const days = [...new Set(u.sections.flatMap(s => s.days.map(d => d.day)).concat(u.attn.map(x => x.day)))].filter(d => d >= FROM7 && d <= RUN).sort().reverse();
+  if (!days.length) return '<p class="empty">No classes in the last 7 days.</p>';
+  const issues = d => { const g = {}; let r = 0, w = 0; const add = (sec, c, txt) => { (g[sec] = g[sec] || []).push([c, txt]); c === 'bad' ? r++ : w++; };
+    u.attn.filter(x => x.day === d).forEach(x => { const c = `${esc(x.session_title || 'Untitled')} <span class="t-muted">${esc(x.start_time)}–${esc(x.end_time)}${x.instructor_name ? ', ' + esc(x.instructor_name) : ''}</span>`;
+      if (x.no_recording) add(x.section_name, 'bad', `No recording: ${c}`); if (x.recorded_not_evaluated) add(x.section_name, 'bad', `Not QA-evaluated: ${c}`);
+      if (x.pending_after_date) add(x.section_name, 'bad', `Still pending: ${c}`); if (x.malpractice) add(x.section_name, 'bad', `Malpractice: ${c}`);
+      if (x.flagged) add(x.section_name, 'bad', `QA flagged: ${c}`); if (x.zero_qa) add(x.section_name, 'bad', `Zero QA score: ${c}`);
+      if (x.partially_completed) add(x.section_name, 'warn', `Partly completed: ${c}`); if (x.report_not_opened) add(x.section_name, 'warn', `QA report not opened: ${c}`); });
+    u.sections.forEach(s => { const at = s.att.find(x => x.day === d); if (at && at.not_submitted) add(s.label, 'warn', `Attendance not submitted for ${at.not_submitted} of ${at.records} records`);
+      const neg = s.fb.filter(x => x.day === d).reduce((a, x) => a + (x.negative || 0), 0); if (neg) add(s.label, 'warn', plural(neg, 'negative feedback response')); });
+    return { g, r, w }; };
+  const sel = days.includes(state.day[u.name]) ? state.day[u.name] : days[0], k = issues(sel);
+  const dd = u.sections.flatMap(s => s.days.filter(x => x.day === sel)), t = sumDays(dd);
+  return `<div class="seg" role="group" aria-label="Day">${days.map(d => { const x = issues(d); return `<button type="button" data-day="${d}" aria-pressed="${d === sel}">${dLabel(d)}${x.r ? `<span class="cnt bad">${x.r}</span>` : ''}${x.w ? `<span class="cnt warn">${x.w}</span>` : ''}</button>`; }).join('')}</div>
+    <p style="margin:0">${dLabel(sel)}: ${plural(t.classes, 'class', 'classes')} in ${plural(dd.length, 'section')}, ${N(t.completed)} completed${t.with_recording_info ? `, ${N(t.recorded)} of ${N(t.with_recording_info)} recorded` : ''}${t.qa_n ? `, avg QA ${avg(t.qa_sum, t.qa_n)}` : ''}.</p>
+    <div>${Object.keys(k.g).length ? Object.entries(k.g).sort((x, y) => y[1].filter(i => i[0] === 'bad').length - x[1].filter(i => i[0] === 'bad').length).map(([sec, L]) => `<div class="ds-group"><b>${esc(sec)}</b><ul>${L.sort((x, y) => x[0] === y[0] ? 0 : x[0] === 'bad' ? -1 : 1).map(([c, txt]) => `<li class="${c}">${txt}</li>`).join('')}</ul></div>`).join('') : '<p class="empty">Nothing went wrong on this day.</p>'}</div>
+    <p class="note">Red count = no recording, not evaluated, still pending, malpractice, flagged, zero score. Amber count = partly completed, report not opened, attendance not submitted, negative feedback.</p>`;
+}
+
+/* =============== UNIVERSITIES: layer 3 =============== */
+function secView(u, s){
+  const t = sumDays(s.days), at = sumAtt(s.att), fb = sumFb(s.fb), c = s.sch || schOf([]), attn = u.attn.filter(x => x.section_name === s.label);
+  const why = x => [x.no_recording && ['bad', 'no recording'], x.recorded_not_evaluated && ['bad', 'not evaluated'], x.pending_after_date && ['bad', 'still pending'], x.malpractice && ['bad', 'malpractice'], x.flagged && ['bad', 'flagged'], x.zero_qa && ['bad', 'zero QA'], x.partially_completed && ['warn', 'partly completed'], x.report_not_opened && ['warn', 'report not opened']].filter(Boolean);
+  const items = [];
+  if (s.days.length && !s.next) items.push(['bad', `Nothing planned for ${dLabel(NEXT)}`]);
+  if (c.gap) items.push(['bad', `${plural(c.gap, 'session')} scheduled on or before ${fmtD(RUN)} not marked done (${N(c.sched)} scheduled till then, ${N(c.sched - c.gap)} done)`]);
+  if (attn.length) items.push([redCount(attn) ? 'bad' : 'warn', `${plural(attn.length, 'class', 'classes')} with an issue in the last 7 days (see Classes with issues)`]);
+  if (at.not_submitted) items.push(['warn', `${N(at.not_submitted)} of ${N(at.records)} attendance records not submitted`]);
+  if (fb.negative) items.push(['warn', plural(fb.negative, 'negative feedback response')]);
+  return crumbs([['Universities', { u: null, s: null }], [u.name, { s: null }], [s.label]]) +
+  `<div class="head"><h2>${esc(s.label)}</h2><div class="sub">${[u.name, s.batch && 'batch ' + s.batch, s.semester].filter(Boolean).map(esc).join(' · ')}</div></div>
+  <div class="kpis">${kpi('Classes, 14 days', N(t.classes), `on ${plural(s.days.length, 'day')}`)}${kpi('Working span', t.rows ? mins(t.span_mins / t.rows) : null, 'first start to last end, per day')}${kpi('Recorded', pctS(t.recorded, t.with_recording_info), `${N(t.recorded)} of ${N(t.with_recording_info)}`)}
+    ${kpi('Avg QA score', avg(t.qa_sum, t.qa_n), `n=${N(t.qa_n)}`)}${kpi('Attendance present', pctS(at.present, at.submitted), `of ${N(at.submitted)} submitted`)}${kpi('Semester sessions done', c.total ? pct(c.done, c.total) + '%' : null, c.total ? `${N(c.done)} of ${N(c.total)} in the schedule` : 'no schedule')}${kpi(`Planned for ${fmtD(NEXT)}`, s.next ? plural(s.next.classes, 'class', 'classes') : s.days.length ? '0' : null, s.next ? `first at ${esc(s.next.first)}` : '')}</div>
+  ${attnBox(items)}
+  ${fold('Day by day', `${fmtD(FROM)}–${fmtD(RUN)}`, s.days.length ? `<div class="scroll"><table><thead><tr><th>Date</th><th class="num">Classes</th><th>Start–end</th><th class="num">Span</th><th class="num">Teaching time</th><th>Status</th><th class="num">Recorded</th><th class="num">Avg QA</th></tr></thead><tbody>${s.days.slice().reverse().map(d => `<tr><td>${dLabel(d.day)}</td><td class="num">${d.classes}</td><td>${val(d.first_start)}–${val(d.last_end)}</td><td class="num">${mins(d.span_mins)}</td><td class="num">${mins(d.class_mins)}</td><td>${statusChips(d)}</td><td class="num">${d.with_recording_info ? `${d.recorded}/${d.with_recording_info}` : nul}</td><td class="num">${avg(d.qa_sum, d.qa_n) ?? nul}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">No classes in the last 14 days.</p>', true)}
+  ${fold('Classes with issues', attn.length ? `${plural(attn.length, 'class', 'classes')}, last 7 days` : 'none in the last 7 days', attn.length ? `<div class="scroll"><table><thead><tr><th>Date</th><th>Time</th><th>Class</th><th>Instructor</th><th class="num">QA</th><th>Issue</th></tr></thead><tbody>${attn.map(x => `<tr><td>${dLabel(x.day)}</td><td>${esc(x.start_time)}–${esc(x.end_time)}</td><td>${val(x.session_title)} <span class="t-muted">${esc((x.session_type || '').toLowerCase())}</span></td><td>${val(x.instructor_name)}</td><td class="num">${x.qa_rating ?? nul}</td><td>${why(x).map(([k, l]) => `<span class="pill ${k}">${l}</span>`).join(' ')}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">No class had an issue in the last 7 days.</p>', attn.length > 0)}
+  ${fold('Attendance by date', at.submitted ? `${pct(at.present, at.submitted)}% present` : 'no records', s.att.length ? `<div class="scroll"><table><thead><tr><th>Date</th><th class="num">Records</th><th class="num">Submitted</th><th class="num">Present</th><th class="num">Not submitted</th><th class="num">Students</th><th class="num">Students present</th></tr></thead><tbody>${s.att.slice().reverse().map(r => `<tr><td>${dLabel(r.day)}</td><td class="num">${N(r.records)}</td><td class="num">${N(r.submitted)}</td><td class="num">${N(r.present)} <span class="t-muted">${r.submitted ? pct(r.present, r.submitted) + '%' : ''}</span></td><td class="num">${r.not_submitted ? `<span class="pill warn">${N(r.not_submitted)}</span>` : '0'}</td><td class="num">${N(r.students)}</td><td class="num">${N(r.students_present)}</td></tr>`).join('')}</tbody></table></div><p class="note">Records count one row per student per class.</p>` : '<p class="empty">No attendance records in the last 14 days.</p>')}
+  ${fold('Feedback by date', fb.responses ? `${N(fb.responses)} responses, ${N(fb.negative)} negative` : 'no responses', s.fb.length ? `<div class="scroll"><table><thead><tr><th>Date</th><th>Subject</th><th class="num">Responses</th><th class="num">Understanding</th><th class="num">Teaching quality</th><th class="num">Guidance clarity</th><th class="num">Negative</th></tr></thead><tbody>${s.fb.slice().sort((x, y) => y.day.localeCompare(x.day)).map(r => `<tr><td>${dLabel(r.day)}</td><td>${val(r.subject)}</td><td class="num">${N(r.responses)}</td><td class="num">${avg(r.understanding_sum, r.understanding_n) ?? nul}</td><td class="num">${avg(r.teaching_sum, r.teaching_n) ?? nul}</td><td class="num">${avg(r.guidance_sum, r.guidance_n) ?? nul}</td><td class="num">${r.negative ? `<span class="pill warn">${r.negative}</span>` : '0'}</td></tr>`).join('')}</tbody></table></div><p class="note">Scores on a 1–5 scale.</p>` : '<p class="empty">No feedback in the last 14 days.</p>')}
+  ${fold('Semester progress', c.total ? `${N(c.done)} of ${N(c.total)} sessions done, ${N(c.gap)} not marked done` : 'no schedule', (c.total ? progTable([['This section', c]], '') : '<p class="empty">No schedule for this section.</p>') +
+    (s.cur.some(x => x.planned) ? `<h3 style="font-size:14.5px">By course</h3><div class="scroll"><table><thead><tr><th>Subject</th><th>Course</th><th class="num">Sessions in course plan</th><th class="num">Scheduled till ${fmtD(RUN)}</th><th class="num">Done</th><th class="num">Not marked done</th></tr></thead><tbody>${s.cur.filter(x => x.planned).sort((x, y) => (x.subject || '').localeCompare(y.subject || '')).map(x => { const k = curOf([x]); return `<tr><td>${val(x.subject)}</td><td>${val(x.course)}</td><td class="num">${N(k.planned)}</td><td class="num">${N(k.due)}</td><td class="num">${N(k.done)}</td><td class="num">${k.behind ? `<span class="pill bad">${k.behind}</span>` : '0'}</td></tr>`; }).join('')}</tbody></table></div>${(() => { const p = curOf(s.cur).planned; return p !== c.total ? `<p class="note">The course plan lists ${N(p)} sessions and the schedule lists ${N(c.total)}; the two tables are kept separately, so the totals can differ.</p>` : ''; })()}` : '') + `<p class="note">${DONE_S}</p>`)}`;
+}
+function progTable(rows, first){
+  return `<div class="scroll"><table><thead><tr>${first ? `<th>${first}</th>` : ''}<th class="num">Sessions in schedule</th><th class="num">Scheduled till ${fmtD(RUN)}</th><th class="num">Done</th><th class="num">Not marked done</th><th class="num">Scheduled later</th><th class="num">No date yet</th><th class="num">Semester done</th></tr></thead><tbody>${rows.map(([k, c]) => `<tr>${first ? `<td>${k}</td>` : ''}<td class="num">${N(c.total)}</td><td class="num">${N(c.sched)}</td><td class="num">${N(c.done)}</td><td class="num">${gapCell(c)}</td><td class="num">${N(c.later)}</td><td class="num">${N(c.nodate)}</td><td class="num">${bar(pct(c.done, c.total))}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function crumbs(parts){ return `<nav class="crumbs" aria-label="Breadcrumb">${parts.map(([label, patch], i) => (i ? '<span class="sep">›</span>' : '') + (patch ? `<button type="button" data-crumb='${JSON.stringify(patch)}'>${esc(label)}</button>` : `<span>${esc(label)}</span>`)).join('')}</nav>`; }
+
+/* =============== SUBJECTS =============== */
+const CATS = ['TECH', 'APTITUDE', 'MATH', 'ENGLISH'], CCOL = { TECH: 'var(--tech)', APTITUDE: 'var(--apt)', MATH: 'var(--math)', ENGLISH: 'var(--eng)', ALL: 'var(--fg)' };
+const qaWeek = (cat, w) => { let s = 0, n = 0, z = 0; U.forEach(u => u.qaw.forEach(r => { if (r.week === w && (cat === 'ALL' || r.subject === cat)) { s += r.qa_sum || 0; n += r.qa_n || 0; z += r.zero_qa || 0; } })); return { avg: avg(s, n), n, z }; };
+function subjFacts(cat){
+  const ok = x => cat === 'ALL' || x === cat;
+  const qa = qaWeek(cat, LASTWK), prev = qaWeek(cat, PREVWK);
+  const cu = schOf(STATUS.filter(r => ok(r.sub)));
+  const r = rubAgg(ALLRUB, cat), wl = weakest(r, LEC), wp = weakest(r, PRA);
+  const zero = D.qa_weeks.reduce((a, w) => a + qaWeek(cat, w).z, 0);
+  return { qa, prev, cu, r, wl, wp, zero };
+}
+function subjView(){
+  const cat = state.cat, F = subjFacts(cat);
+  const card = c => { const f = subjFacts(c), d = f.qa.avg !== null && f.prev.avg !== null ? Math.round((f.qa.avg - f.prev.avg) * 100) / 100 : null;
+    return `<button type="button" class="sc" style="--c:${CCOL[c]}" data-cat="${c}" aria-pressed="${cat === c}"><span class="t">${titleCase(c)}</span><span><span class="big">${f.qa.avg ?? '—'}</span> <span class="t-muted">avg QA, week of ${fmtD(LASTWK)}</span></span>
+      <dl><dt>Change vs week before</dt><dd>${d === null ? nul : `<span class="${d >= 0 ? 'up' : 'down'}">${d > 0 ? '+' : ''}${d}</span>`}</dd><dt>Semester sessions done</dt><dd>${pctS(f.cu.done, f.cu.total)}</dd><dt>Not marked done</dt><dd>${N(f.cu.gap)}</dd><dt>No date yet</dt><dd>${N(f.cu.nodate)}</dd><dt>Weakest rubric</dt><dd>${f.wl ? `${RN[f.wl]} ${f.r[f.wl].avg}` : nul}</dd><dt>Zero QA, 8 weeks</dt><dd>${N(f.zero)}</dd></dl></button>`; };
+  const items = [];
+  const lows = CATS.map(c => ({ c, f: subjFacts(c) })).filter(o => o.f.qa.avg !== null && o.f.prev.avg !== null && o.f.qa.avg < o.f.prev.avg);
+  if (lows.length) items.push(['warn', `QA went down last week in ${lows.map(o => `${titleCase(o.c)} (${o.f.prev.avg} → ${o.f.qa.avg})`).join(', ')}`]);
+  if (F.wl) items.push(['warn', `Weakest lecture rubric${cat === 'ALL' ? '' : ' in ' + titleCase(cat)}: ${RN[F.wl]} ${F.r[F.wl].avg}${F.wp ? `; weakest practice rubric: ${RN[F.wp]} ${F.r[F.wp].avg}` : ''}`]);
+  if (F.cu.gap) items.push(['bad', `${N(F.cu.gap)} sessions${cat === 'ALL' ? '' : ' in ' + titleCase(cat)} were scheduled on or before ${fmtD(RUN)} but are not marked done (see Semester progress by university)`]);
+  return `<div class="head"><h2>Subjects</h2><div class="sub">Pick a subject to filter everything below. Pick it again to see all subjects.</div></div>
+  <div class="subj">${CATS.map(card).join('')}</div>
+  ${attnBox(items, cat === 'ALL' ? 'Needs attention, all subjects' : `Needs attention, ${titleCase(cat)}`)}
+  ${fold('QA score week by week', `last ${D.qa_weeks.length} weeks`, trendChart(), true)}
+  ${fold('Semester progress by university', `${pctS(F.cu.done, F.cu.total)} of sessions done, ${N(F.cu.gap)} not marked done`, sessionTable())}
+  ${fold('Rubrics', F.wl ? `weakest: ${RN[F.wl]}` : '', rubricOrg())}
+  ${fold('Zero QA scores by university', `${N(F.zero)} in 8 weeks`, zeroTable())}`;
+}
+function trendChart(){
+  const wk = D.qa_weeks, ser = state.cat === 'ALL' ? ['ALL'].concat(CATS) : [state.cat];
+  const S = {}; ser.forEach(k => { S[k] = wk.map(w => qaWeek(k, w)); });
+  const vals = ser.flatMap(k => S[k].map(p => p.avg)).filter(v => v !== null);
+  if (!vals.length) return '<p class="empty">No QA scores.</p>';
+  const lo = Math.floor(Math.min(...vals) * 2) / 2 - 0.5, hi = Math.ceil(Math.max(...vals) * 2) / 2;
+  const W = 1040, H = 300, L = 40, R = 110, T = 12, B = 30, x = i => L + i * (W - L - R) / Math.max(1, wk.length - 1), y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+  const ticks = []; for (let v = lo; v <= hi + 1e-9; v += 0.5) ticks.push(v);
+  const lines = ser.map(k => { const pts = S[k].map((p, i) => p.avg === null ? null : [x(i), y(p.avg)]).filter(Boolean);
+    return `<polyline fill="none" stroke="${CCOL[k]}" stroke-width="${k === 'ALL' ? 2.6 : 2}" stroke-linejoin="round" points="${pts.map(p => p.join(',')).join(' ')}"/>${pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="3.2" fill="${CCOL[k]}" stroke="var(--panel)" stroke-width="1.5"/>`).join('')}`; }).join('');
+  const labs = ser.map(k => { const i = S[k].map(p => p.avg).lastIndexOf(S[k].filter(p => p.avg !== null).slice(-1)[0]?.avg); return i < 0 ? null : { y: y(S[k][i].avg) + 4, t: `${k === 'ALL' ? 'All' : titleCase(k)} ${S[k][i].avg}`, x: x(i) + 8 }; }).filter(Boolean).sort((a, b) => a.y - b.y);
+  for (let j = 1; j < labs.length; j++) if (labs[j].y - labs[j - 1].y < 15) labs[j].y = labs[j - 1].y + 15;
+  const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Average QA score per week"><g class="grid">${ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v.toFixed(1)}</text>`).join('')}</g>
+    ${wk.map((w, i) => `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${fmtD(w)}${w === THISWK ? '*' : ''}</text>`).join('')}<line class="xh" y1="${T}" y2="${H - B}" x1="0" x2="0" visibility="hidden"/>${lines}${labs.map(l => `<text class="lab" x="${l.x}" y="${l.y}">${l.t}</text>`).join('')}</svg>`;
+  CHART = { wk, ser, S, x, W, L, R };
+  return `<div class="legend">${ser.map(k => `<span><i style="background:${CCOL[k]}"></i>${k === 'ALL' ? 'All subjects' : titleCase(k)}</span>`).join('')}</div><div class="chart" id="chart">${svg}<div class="tip" hidden></div></div>
+    <p class="note">Average QA of recorded, evaluated lecture and practice sessions, weeks starting Monday. * = this week so far (${fmtD(RUN)} only).</p>`;
+}
+let CHART = null;
+function sessionTable(){
+  const cat = state.cat, rows = STATUS.filter(r => cat === 'ALL' || r.sub === cat);
+  const sems = [...new Set(rows.map(r => r.sem).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  return sems.map(sm => { const L = rows.filter(r => r.sem === sm), us = [...new Set(L.map(r => r.u))].map(u => ({ u, c: schOf(L.filter(r => r.u === u)) })).sort((a, b) => b.c.gap - a.c.gap);
+    return `<h3 style="font-size:14.5px">${esc(sm)} <span class="sub">· ${plural(us.length, 'university', 'universities')}</span></h3><div class="scroll"><table><thead><tr><th>University</th><th>Batch</th><th class="num">Sessions in schedule</th><th class="num">Scheduled till ${fmtD(RUN)}</th><th class="num">Done</th><th class="num">Not marked done</th><th class="num">Scheduled later</th><th class="num">No date yet</th><th class="num">Semester done</th></tr></thead><tbody>${us.map(({ u, c }) => `<tr class="go" tabindex="0" data-uni="${U.indexOf(u)}"><td>${esc(u.name)}</td><td>${u.batchOf(sm)}</td><td class="num">${N(c.total)}</td><td class="num">${N(c.sched)}</td><td class="num">${N(c.done)}</td><td class="num">${gapCell(c)}</td><td class="num">${N(c.later)}</td><td class="num">${N(c.nodate)}</td><td class="num">${bar(pct(c.done, c.total))}</td></tr>`).join('')}</tbody></table></div>`; }).join('') +
+    `<p class="note">Current semester, one count per session per section. Most "not marked done" first. ${DONE_S} No session in the data is cancelled or skipped.</p>`;
+}
+function rubricOrg(){
+  const cat = state.cat, r = rubAgg(ALLRUB, cat);
+  const low = (k) => U.map(u => ({ u, x: rubAgg(u.rub, cat)[k] })).filter(o => o.x).sort((a, b) => a.x.avg - b.x.avg).slice(0, 3).map(o => `${esc(o.u.name)} ${o.x.avg}`).join(', ');
+  const wl = weakest(r, LEC), wp = weakest(r, PRA);
+  return `${rubBars(r)}<ul style="margin:0;padding-left:18px;display:grid;gap:4px;font-size:14px">${wl ? `<li>Lowest universities on ${RN[wl]}: ${low(wl)}</li>` : ''}${wp ? `<li>Lowest universities on ${RN[wp]}: ${low(wp)}</li>` : ''}</ul>
+    <p class="note">Last 8 weeks. Lecture and practice rubrics are scored on different sessions. Process adherence is scored for English only and its average sits far below every other rubric, so it is not ranked; the data does not say what scale it uses.</p>`;
+}
+function zeroTable(){
+  const cat = state.cat, L = U.map(u => { const R = u.qaw.filter(r => cat === 'ALL' || r.subject === cat); return { u, z: R.reduce((a, r) => a + (r.zero_qa || 0), 0), n: R.reduce((a, r) => a + (r.qa_n || 0), 0) }; }).filter(o => o.z).sort((a, b) => b.z - a.z);
+  const ZI = I.filter(i => i.zero_qa_14d && (cat === 'ALL' || i.category === cat));
+  const tIds = new Set(U.flatMap(u => u.tickets.flatMap(t => (t.instructor_ids || '').split(','))).concat(D.tickets_no_uni.flatMap(t => (t.instructor_ids || '').split(','))).filter(Boolean));
+  const withT = ZI.filter(i => tIds.has(i.instructor_user_id));
+  return `<p style="margin:0">${plural(ZI.length, 'instructor')} got a zero in the last 14 days; ${N(withT.length)} of them raised a support ticket this month.</p>
+    ${L.length ? `<div class="scroll"><table><thead><tr><th>University</th><th class="num">Zero scores</th><th class="num">Of all scores</th><th class="num">Share</th></tr></thead><tbody>${L.map(o => `<tr class="go" tabindex="0" data-uni="${U.indexOf(o.u)}"><td>${esc(o.u.name)}</td><td class="num">${N(o.z)}</td><td class="num">${N(o.n)}</td><td class="num">${pctS(o.z, o.n)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">No zero scores.</p>'}
+    <p class="note">Last 8 weeks, recorded and evaluated lecture and practice sessions.</p>`;
+}
+
+/* =============== MANAGERS =============== */
+function mgrList(){
+  const by = {}; D.managers_weekly.forEach(r => { if (!r.manager) return; const m = by[r.manager] = by[r.manager] || { name: r.manager, cat: r.category, instructors: r.instructors, active: r.active_instructors, weeks: [] }; if (r.week) m.weeks.push(r); });
+  return CAPS.map(n => by[n]).filter(Boolean);
+}
+const wkOf = (m, w) => m.weeks.find(x => x.week === w);
+function mgrsView(){
+  const L = mgrList(), tot = L.reduce((a, m) => a + (m.active || 0), 0), con = L.reduce((a, m) => a + ((wkOf(m, LASTWK) || {}).instructors_connected || 0), 0);
+  const ws = L.map(m => wkOf(m, LASTWK)).filter(Boolean), qn = ws.reduce((a, w) => a + (w.connect_qa_n || 0), 0), qs = ws.reduce((a, w) => a + (w.connect_qa_sum || 0), 0);
+  const P = I.filter(i => i.status === 'ACTIVE').map(i => ({ i, c: capsOf(i) })), none = P.filter(p => !p.c.length), multi = P.filter(p => p.c.length > 1);
+  const cov = m => { const w = wkOf(m, LASTWK); return m.active ? pct(w ? w.instructors_connected : 0, m.active) : null; };
+  const idle = L.filter(m => !m.weeks.some(w => w.connects)), low = L.filter(m => !idle.includes(m)).sort((a, b) => cov(a) - cov(b)).slice(0, 3);
+  const items = [];
+  if (idle.length) items.push(['bad', `No 1:1s at all in the last 8 weeks: ${names(idle.map(m => `${m.name} (${m.active} instructors)`))}`]);
+  if (low.length) items.push(['warn', `Lowest coverage in the week of ${fmtD(LASTWK)}: ${low.map(m => `${esc(m.name)} ${cov(m)}%`).join(', ')}`]);
+  if (none.length) items.push(['bad', `${plural(none.length, 'active instructor')} have none of these ${CAPS.length} managers`]);
+  if (multi.length) items.push(['warn', `${plural(multi.length, 'active instructor')} have more than one: ${names(multi.map(p => `${p.i.instructor_name} (${p.c.join(' + ')})`), 3)}`]);
+  return `<div class="head"><h2>Managers</h2><div class="sub">The ${L.length} capability managers. Last full week = week of ${fmtD(LASTWK)}. Open a manager to see their instructors.</div></div>
+  <div class="kpis">${kpi('Active instructors', N(tot), `across ${L.length} managers`)}${kpi('Connected', N(con), `with a completed 1:1, week of ${fmtD(LASTWK)}`)}${kpi('Coverage', pctS(con, tot), 'connected ÷ active')}${kpi('Avg 1:1 QA', avg(qs, qn), `n=${N(qn)}`)}</div>
+  ${attnBox(items)}
+  <section class="card"><div class="ch"><h3>Managers</h3></div><div class="cb scroll"><table><thead><tr><th>Manager</th><th>Subject</th><th class="num">Active instructors</th><th class="num">Connected, wk of ${fmtD(LASTWK)}</th><th class="num">Coverage</th><th class="num">Avg 1:1 QA</th><th class="num">This week so far</th></tr></thead><tbody>${L.map((m, i) => { const w = wkOf(m, LASTWK), t = wkOf(m, THISWK);
+    return `<tr class="go" tabindex="0" data-mgr="${i}"><td>${esc(m.name)}</td><td>${val(m.cat)}</td><td class="num">${N(m.active)}</td><td class="num">${idle.includes(m) ? '<span class="pill bad">no 1:1s</span>' : N(w ? w.instructors_connected : 0)}</td><td class="num">${bar(cov(m))}</td><td class="num">${w && w.connect_qa_n ? avg(w.connect_qa_sum, w.connect_qa_n) : nul}</td><td class="num">${t ? `${N(t.instructors_connected)} <span class="t-muted">of ${N(t.connects)} booked</span>` : '0'}</td></tr>`; }).join('')}</tbody></table></div>
+    <div class="cb"><p class="note">Connected = different instructors with a completed 1:1 that week. 1:1 QA = average QA score of completed 1:1s. An instructor with two managers counts for both.</p></div></section>`;
+}
+function mgrView(m){
+  const w = wkOf(m, LASTWK), L = I.filter(i => i.status === 'ACTIVE' && capsOf(i).some(c => c.toLowerCase() === m.name.toLowerCase())).sort((a, b) => (a.qa_last3_avg ?? 99) - (b.qa_last3_avg ?? 99));
+  const notMet = L.filter(i => !(i.last_completed_connect && i.last_completed_connect >= LASTWK)), zero = L.filter(i => i.zero_qa_14d), q = L.filter(i => i.qa_last3_avg !== null && i.qa_last3_avg !== undefined);
+  const items = [];
+  if (notMet.length) items.push(['bad', `${notMet.length} of ${L.length} active instructors have had no completed 1:1 since ${fmtD(LASTWK)}`]);
+  if (w && (w.missed || w.reschedule_required)) items.push(['warn', `${N((w.missed || 0) + (w.reschedule_required || 0))} 1:1s missed or needing a reschedule in the week of ${fmtD(LASTWK)}`]);
+  if (w && w.transcript_failed) items.push(['warn', `${plural(w.transcript_failed, 'completed 1:1')} with a failed transcript, so no 1:1 QA`]);
+  if (zero.length) items.push(['bad', `${plural(zero.length, 'instructor')} got a zero QA score in the last 14 days: ${names(zero.map(i => i.instructor_name || 'Unnamed'), 3)}`]);
+  return crumbs([['Managers', { m: null }], [m.name]]) +
+  `<div class="head"><h2>${esc(m.name)}</h2><div class="sub">${val(m.cat)} · ${N(m.instructors)} instructors mapped, ${N(m.active)} active</div></div>
+  <div class="kpis">${kpi('Active instructors', N(m.active))}${kpi('Connected', w ? N(w.instructors_connected) : '0', `week of ${fmtD(LASTWK)}`)}${kpi('Coverage', m.active ? pctS(w ? w.instructors_connected : 0, m.active) : null, 'connected ÷ active')}${kpi('Avg 1:1 QA', w ? avg(w.connect_qa_sum, w.connect_qa_n) : null, w ? `n=${N(w.connect_qa_n)}` : 'no 1:1s that week')}${kpi("Instructors' class QA", q.length ? Math.round(q.reduce((a, i) => a + i.qa_last3_avg, 0) / q.length * 100) / 100 : null, `average of ${q.length} instructors' last 3 QA days`)}</div>
+  ${attnBox(items)}
+  ${fold('Instructors', `${L.length} active, lowest QA first`, L.length ? `<div class="scroll"><table><thead><tr><th>Instructor</th><th>Taught at, 14 days</th><th class="num">Sessions</th><th class="num">QA, last 3 QA days</th><th class="num">Zero QA</th><th class="num">Last completed 1:1</th></tr></thead><tbody>${L.map(i => `<tr><td>${val(i.instructor_name)}</td><td>${i.taught_at ? esc(i.taught_at) : '<span class="null">no session</span>'}</td><td class="num">${N(i.sessions_14d ?? 0)}</td><td class="num">${i.qa_last3_avg ?? nul}</td><td class="num">${i.zero_qa_14d ? `<span class="pill bad">${i.zero_qa_14d}</span>` : '0'}</td><td class="num">${i.last_completed_connect ? `<span class="pill ${i.last_completed_connect >= LASTWK ? 'good' : 'warn'}">${fmtD(i.last_completed_connect)}</span>` : nul}</td></tr>`).join('')}</tbody></table></div><p class="note">Sessions and zero QA cover the last 14 days. Green 1:1 = since ${fmtD(LASTWK)}.</p>` : '<p class="empty">No active instructors mapped.</p>', true)}
+  ${fold('Weekly 1:1s', 'last 8 weeks', m.weeks.length ? `<div class="scroll"><table><thead><tr><th>Week of</th><th class="num">Booked</th><th class="num">Completed</th><th class="num">Missed</th><th class="num">Rescheduled</th><th class="num">Instructors connected</th><th class="num">Avg 1:1 QA</th></tr></thead><tbody>${m.weeks.slice().sort((a, b) => b.week.localeCompare(a.week)).map(x => `<tr><td>${fmtD(x.week)}${x.week === THISWK ? ' <span class="t-muted">so far</span>' : ''}</td><td class="num">${N(x.connects)}</td><td class="num">${N(x.completed)}</td><td class="num">${N(x.missed)}</td><td class="num">${N(x.rescheduled)}</td><td class="num">${N(x.instructors_connected)}</td><td class="num">${avg(x.connect_qa_sum, x.connect_qa_n) ?? nul}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">No 1:1s in the last 8 weeks.</p>')}`;
+}
+
+/* =============== render + events =============== */
+function render(){
+  document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === state.tab));
+  if (state.tab === 'email') { vEmail($('#view')); return; }
+  let h;
+  if (state.tab === 'subj') h = subjView();
+  else if (state.tab === 'mgr') { const L = mgrList(); h = state.m === null ? mgrsView() : mgrView(L[state.m]); }
+  else { const u = state.u === null ? null : U[state.u]; h = !u ? orgView() : state.s === null ? uniView(u) : secView(u, u.sections[state.s]); }
+  $('#view').innerHTML = h;
+  bindChart();
+}
+function bindChart(){
+  const box = document.getElementById('chart'); if (!box || !CHART) return;
+  const svg = box.querySelector('svg'), tip = box.querySelector('.tip'), xh = svg.querySelector('.xh'), C = CHART;
+  const move = e => { const r = svg.getBoundingClientRect(), sx = (e.clientX - r.left) * C.W / r.width; let i = Math.round((sx - C.L) / ((C.W - C.L - C.R) / Math.max(1, C.wk.length - 1))); i = Math.max(0, Math.min(C.wk.length - 1, i));
+    xh.setAttribute('x1', C.x(i)); xh.setAttribute('x2', C.x(i)); xh.setAttribute('visibility', 'visible');
+    tip.innerHTML = `<b>Week of ${fmtD(C.wk[i])}</b>${C.ser.map(k => `<div style="display:flex;justify-content:space-between;gap:12px"><span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${CCOL[k]};margin-right:6px"></i>${k === 'ALL' ? 'All' : titleCase(k)}</span><b>${C.S[k][i].avg ?? '—'}</b></div>`).join('')}<div class="t-muted">n=${N(C.S[C.ser[0]][i].n)}</div>`;
+    tip.hidden = false; const px = C.x(i) * r.width / C.W; tip.style.left = Math.min(r.width - tip.offsetWidth, Math.max(0, px + 12)) + 'px'; tip.style.top = '8px'; };
+  svg.addEventListener('pointermove', move); svg.addEventListener('pointerleave', () => { tip.hidden = true; xh.setAttribute('visibility', 'hidden'); });
+}
+document.addEventListener('click', e => {
+  if (e.target.closest('.reason')) return;
+  const b = e.target.closest('[data-tab],[data-uni],[data-sec],[data-mgr],[data-crumb],[data-cat],[data-day]'); if (!b) return;
+  if (b.dataset.tab) return go({ tab: b.dataset.tab, u: null, s: null, m: null });
+  if (b.dataset.uni !== undefined) return go({ tab: 'uni', u: +b.dataset.uni, s: null });
+  if (b.dataset.sec !== undefined) return go({ s: +b.dataset.sec });
+  if (b.dataset.mgr !== undefined) return go({ m: +b.dataset.mgr });
+  if (b.dataset.crumb) return go(JSON.parse(b.dataset.crumb));
+  if (b.dataset.cat) { state.cat = state.cat === b.dataset.cat ? 'ALL' : b.dataset.cat; const y = window.scrollY; render(); window.scrollTo({ top: y }); return; }
+  if (b.dataset.day) { state.day[U[state.u].name] = b.dataset.day; const det = b.closest('details'); det.querySelector('.fb').innerHTML = dailySummary(U[state.u]); }
 });
+document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('tr.go')) { e.preventDefault(); e.target.click(); } });
+document.addEventListener('input', e => { if (e.target.id === 'q') { state.q = e.target.value; const L = U.map(u => ({ u, a: uniAgg(u) })).filter(o => o.a.act.length); $('#unirows').innerHTML = uniRows(L); } });
 
-// a campus with no sessions on the report date (from the idle list), or null
-const idleOf = campus => (D.idle || []).find(x => x.campus === campus) || null;
+/* =============== the app around the drill-down: load, upload, reasons, email =============== */
+let J = null, saved = null, sendCfg = null, RS = {}, OPTS = [];
+const WIN = { '01': 'universities, sections, students', '02': 'classes per section per day, 14 days', '03': 'classes with an issue, 7 days', '04': 'semester sessions by status and date', '05': 'sessions per course plan, current semester', '06': 'classes tomorrow', '07': 'QA per week, 8 weeks', '08': 'rubric scores, 8 weeks', '09': 'attendance per day, 14 days', '10': 'feedback per day, 14 days', '11': 'one row per instructor', '12': 'manager 1:1s per week, 8 weeks', '13': 'support tickets, this month' };
+function toast(msg, ms = 3200) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms); }
+function showErr(where, msg) { const e = $(where); e.textContent = msg; e.classList.toggle('hidden', !msg); }
 
-// 1. Act on these today
-function vAct(el) {
-  el.innerHTML = `<div class="panel"><h2 class="sec">Act on these today</h2><p class="note">Drawn from the other tabs; the same items open the daily email.</p>
-    <ol class="acts">${D.act.map(a => `<li class="${a.calm ? "calm" : ""}"><span class="bub ${a.calm ? "" : "on"}" aria-hidden="true"></span><span><b>${a.bold}</b>${a.line ? `<br><span class="l">${a.line}</span>` : ""}</span></li>`).join("")}</ol>
-    <p class="note"><span class="bub on" aria-hidden="true"></span> needs action &nbsp; <span class="bub" aria-hidden="true"></span> nothing to do</p></div>`;
+function setup(j) {
+  J = j; D = j.data; RS = j.reasons || {}; OPTS = j.reason_options || [];
+  RUN = D.meta.run_date; FROM = D.meta.from; NEXT = addDays(RUN, 1);
+  THISWK = addDays(RUN, -((new Date(RUN + 'T00:00:00Z').getUTCDay() + 6) % 7)); LASTWK = addDays(THISWK, -7); PREVWK = addDays(THISWK, -14); FROM7 = addDays(RUN, -6);
+  unpackAll(); I = D.instructors; CAPS = D.caps;
+  STATUS = U.flatMap(u => u.st.map(r => ({ ...r, u }))); ALLRUB = U.flatMap(u => u.rub);
+  $('#asof').textContent = `BigQuery export of ${dLabel(RUN)} · daily data ${fmtD(FROM)} – ${fmtD(RUN)}`;
+  $('#foot').innerHTML = `<details><summary>About this data</summary><p style="margin:8px 0">Every number comes from the 13 files of the BigQuery export of ${fmtD(RUN)}. Averages are rebuilt from sums and counts and show n. "null" means there is no value; 0 means the value is zero.</p><div class="scroll"><table><thead><tr><th>File</th><th class="num">Rows</th><th>Holds</th></tr></thead><tbody>${(D.meta.files || []).map(f => `<tr><td>${esc(f.file_name)}</td><td class="num">${N(+f.rows)}</td><td>${esc(WIN[f.file_name.slice(0, 2)] || '')}</td></tr>`).join('')}</tbody></table></div></details>`;
+  $('#fileName').textContent = j.file && j.file.name ? `${j.file.name}${j.file.saved_at ? ' · saved ' + new Date(j.file.saved_at).toLocaleString() : ' · not saved'}` : '';
+  fillDates();
 }
-
-// 2. Campus analysis
-function vCampus(el) {
-  const opts = D.reason_options || [];
-  const reasonCell = r => !opts.length ? `<span class="dim">needs the database</span>` :
-    `<div class="reason" data-campus="${esc(r.campus)}"><select aria-label="Why ${esc(r.short)} has no sessions" class="${r.reason ? "" : "unknown"}">
-      <option value="">Unknown — follow up</option>${opts.map(o => `<option${o === r.reason ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>
-      <input type="text" placeholder="Note (optional)" value="${esc(r.reason_note || "")}" aria-label="Note for ${esc(r.short)}"${r.reason ? "" : " hidden"}></div>`;
-  const idle = table([["", "mark"],["Campus"],["Last session (any type)"],["Without sessions","num"],["Reason"]],
-    D.idle.map(r => `<tr class="${r.reason ? "known" : ""}"><td class="mark"><span class="bub ${r.reason ? "" : "red"}" title="${r.reason ? "Known reason" : "Reason unknown: follow up"}"></span></td><td>${r.reason ? esc(r.short) : `<b>${esc(r.short)}</b>`}</td><td>${day(r.last)}</td><td class="num">${r.days == null ? "no data" : r.days + " days"}</td><td>${reasonCell(r)}</td></tr>`), "t-idle");
-  const nKnown = D.idle.filter(r => r.reason).length;
-  const cov = table([["Campus"],["Sessions","num"],["With QA","num"],["Yesterday","num"],["Usual (27 days)","num"],["Note"]],
-    D.coverage.map(r => `<tr><td>${esc(r.short)}</td><td class="num">${r.sessions}</td><td class="num">${r.with_qa}</td><td class="num">${r.below ? `<span class="bad">${r.pct}%</span>` : r.pct + "%"}</td><td class="num dim">${pct(r.usual)}</td><td>${esc(r.note)}</td></tr>`), "t-cov");
-  const wl = t => {
-    const w = D.watchlist[t];
-    const rows = w.rows.map(r => {
-      const s = r.subject;
-      const idl = idleOf(r.campus);
-      const st = pill(r.status, r.status === "New today" ? "red" : r.status === "Still on list" ? "orange" : "grey")
-        + (idl ? `<br><span class="dim">No sessions since ${day(idl.last)}: listed on older sessions</span>` : "");
-      if (!s) return `<tr><td><b>${esc(r.short)}</b><br>${st}</td><td class="num">${sg(r.gap_p)} → <span class="bad">${sg(r.gap)}</span></td><td colspan="3" class="dim">${r.status === "Removed today" ? "Back within normal variation (not yet a recovery)" : "no data"}</td></tr>`;
-      const rub = s.rubrics.length ? s.rubrics.map(x => `${esc(x.name)} ${n2(x.before)} → <span class="bad">${n2(x.now)}</span> <span class="dim">(others ${n2(x.others)})</span>`).join("<br>")
-        : `<span class="dim">${s.no_rubric ? "No rubric scores for this subject" : "No rubric fell"}</span>`;
-      return `<tr><td><b>${esc(r.short)}</b><br>${st}</td><td class="num">${sg(r.gap_p)} → <span class="bad">${sg(r.gap)}</span><br><span class="dim">${r.n} evals (prev ${r.n_p})</span></td>
-        <td>${esc(s.subject)}${s.also ? `<br><span class="dim">also ${esc(s.also.subject)}: ${n2(s.also.avg)} vs ${n2(s.also.others)} (${s.also.n} evals)</span>` : ""}</td>
-        <td class="num"><span class="bad">${n2(s.avg)}</span> vs ${n2(s.others)}<br><span class="dim">${s.n} evals · was ${n2(s.was)}</span></td><td>${rub}</td></tr>`;
-    });
-    const close = w.close.length ? `<p class="note"><b>Close to the line:</b> ${w.close.map(c => `${esc(c.short)} ${sg(c.chg)} (${c.n} evals)`).join(", ")}</p>` : "";
-    return `<h3>${t === "lecture" ? "Lectures" : "Practice"} — ${w.rows.length} listed <span class="dim">(${w.down} of ${w.compared} campuses declined)</span></h3>` +
-      table([["Campus + status"],["Campus gap (prev 14d → last 14d)","num"],["Subject most affected"],["Subject avg vs other campuses","num"],["Rubric that fell most"]], rows, "t-wl-" + t) + close;
-  };
-  el.innerHTML = `<div class="panel"><h2 class="sec">Campus analysis — ${wday(D.report_date)}</h2>
-    <h3>No sessions on ${day(D.report_date)} — ${D.idle.length}${nKnown ? ` <span class="dim">(${nKnown} with a known reason)</span>` : ""}${dlBtn("t-idle","idle_campuses")}</h3>${idle}
-    ${opts.length ? `<p class="note">Mark why a campus has no sessions. A campus with a reason is left out of the daily email and of “Act on these today”; the reason clears itself once the campus has sessions again. Unknown ones stay as follow-ups.</p>` : ""}
-    <h3>QA coverage — lowest five${dlBtn("t-cov","qa_coverage")}</h3>${cov}
-    <p class="note">Coverage = sessions with a completed report ÷ sessions scheduled (lecture + practice). Usual = the campus’s previous 27 days.</p></div>
-    <div class="panel"><h2 class="sec">Watchlist — campuses losing ground against the same subjects elsewhere</h2>
-    <p class="note">Last 14 days vs the 14 days before. Listed when the drop is below −2 × standard error (SD 1.2 lecture, 1.9 practice), with 20+ evaluations in each period. Gap = campus average minus the same subjects and session type at other campuses, weighted by the campus’s own mix.</p>
-    ${wl("lecture")}${wl("practice")}</div>`;
+function fillDates() {
+  const sel = $('#runDate'), L = saved && saved.dates && saved.dates.length ? saved.dates.map(x => x.date) : [RUN];
+  if (!L.includes(RUN)) L.unshift(RUN);
+  sel.innerHTML = L.map(d => `<option value="${d}"${d === RUN ? ' selected' : ''}>${dLabel(d)}${d === L[0] ? ' (latest)' : ''}</option>`).join('');
+  sel.disabled = L.length < 2;
 }
-
-// 3. Manager connect usage
-function vConnects(el) {
-  const c = D.connects, g = D.connect_groups;
-  const heads = [["Manager"],["Instructors","num"],["Connects<br>" + c.days.map(d => dt(d).getDate()).join(" · ") + "*","num"],["Done / missed /<br>resched / not updated","num"],["Usual<br>completion","num"],["Last completed"],["Platform use (3 days)"]];
-  const rows = c.rows.map(r => {
-    const use = r.use.days ? `${r.use.days} of ${r.use.of} days<br><span class="dim">${r.use.tab} connect-tab · ${r.use.qa} QA reports</span>`
-      : (r.use.last_seen && r.use.last_seen.length ? r.use.last_seen.map(x => `${esc(x.name)} ${x.last ? "last seen " + day(x.last) : "never seen"}`).join("<br>") : "No platform activity");
-    const lastS = r.total === 0 && r.last_scheduled && r.last_scheduled !== r.last_completed ? `<br><span class="dim">last scheduled ${day(r.last_scheduled)}</span>` : "";
-    return `<tr class="${r.note ? "hasnote" : ""}"><td><b>${esc(r.manager)}</b><br>${pill(r.tag, r.color)}</td><td class="num">${r.instructors}</td><td class="num">${r.per_day.join(" · ")}</td>
-      <td class="num">${r.total ? `${r.done} / ${r.missed} / ${r.resched} / ${r.pending}` : "—"}</td><td class="num">${r.usual == null ? "—" : r.usual < 50 ? `<span class="bad">${r.usual}%</span>` : r.usual + "%"}</td>
-      <td>${r.last_completed ? day(r.last_completed) : "Never"}${lastS}</td><td>${use}</td></tr>` + (r.note ? `<tr class="noteline"><td colspan="7">${r.note}</td></tr>` : "");
-  });
-  el.innerHTML = `<div class="panel"><h2 class="sec">Manager connect usage — ${wday(c.from)} to ${wday(c.to)}</h2>
-    <p class="note"><b>${g.none.managers} managers</b> (${g.none.instructors} instructors) recorded no connects · ${g.zero.managers} (${g.zero.instructors}) completed none · ${g.half.managers} completed under half or just started · ${g.normal.managers} using it normally.</p>
-    <p class="note">* ${day(c.provisional)} is provisional: statuses and new slots keep arriving for about a day, so tags are judged on the days before it. Usual completion = completed ÷ scheduled, ${day(c.usual_from)} – ${day(c.usual_to)}. “Missed” means no call was captured in the tool; some connects are held but not recorded.</p>
-    <h3>All Capability Managers${dlBtn("t-cu","manager_connects")}</h3>${table(heads, rows, "t-cu")}
-    ${c.small.length ? `<p class="note">Not in the table (under 3 instructors): ${c.small.map(s => `${esc(s.manager)} (${s.instructors})`).join(", ")}.</p>` : ""}</div>`;
+function shown() { $('#drop').classList.add('hidden'); $('#app').classList.remove('hidden'); }
+async function load(date, keep) {
+  $('#busy').classList.remove('hidden'); showErr('#err2', '');
+  try {
+    const r = await fetch('/api/drill' + (date ? '?date=' + encodeURIComponent(date) : ''));
+    const j = await r.json().catch(() => ({ error: `The server answered ${r.status}.` }));
+    if (!r.ok || j.error) throw new Error(j.error || `The server answered ${r.status}.`);
+    if (!keep) Object.assign(state, { u: null, s: null, m: null });
+    setup(j); shown(); render();
+    return true;
+  } catch (e) {
+    if (!J) { $('#dropBusy').classList.add('hidden'); $('#dropIdle').classList.remove('hidden'); showErr('#err', e.message); }
+    else showErr('#err2', e.message);
+    return false;
+  } finally { $('#busy').classList.add('hidden'); $('#dropBusy').classList.add('hidden'); }
 }
-
-// 4. Manager detail
-function vDetail(el) {
-  const m = D.manager_details[pickMgr];
-  const opts = D.managers.map(x => `<option ${x === pickMgr ? "selected" : ""}>${esc(x)}</option>`).join("");
-  if (!m) { el.innerHTML = `<div class="panel">No Capability Managers in this export.</div>`; return; }
-  const rows = m.rows.map(r => {
-    const dates = r.dates.length ? r.dates.map(day).join(", ") : "no QA days";
-    const cs = r.connect_status ? `${esc(r.connect_status)} <span class="dim">${day(r.connect_date)}</span>` : '<span class="dim">none on record</span>';
-    const tags = (r.bottomq ? " " + pill("bottom quarter", "red") : "") + (r.not_connected ? " " + pill("not connected 14d", "amber") : "") + (!r.eligible ? " " + pill("not ranked", "grey") : "");
-    return `<tr><td><b>${esc(r.name)}</b>${tags}</td><td>${esc(r.campus || "no data")}<br><span class="dim">${esc(r.subject || "")}</span></td>
-      <td class="num">${n2(r.avg)} <span class="dim">(${r.prev == null ? "no data" : r.prev.toFixed(2)})</span><br><span class="dim">${dates} · ${r.n ?? 0} evals</span></td>
-      <td>${r.last_connect ? day(r.last_connect) : '<span class="dim">never</span>'}</td><td>${cs}</td></tr>`;
-  });
-  el.innerHTML = `<div class="panel"><div class="mpick"><div class="field"><label for="mgrPick">Capability Manager</label><select id="mgrPick">${opts}</select></div></div>
-    <div class="stats">
-      <div class="stat"><div class="v">${m.instructors}</div><div class="k">instructors</div></div>
-      <div class="stat"><div class="v">${m.avg == null ? "no data" : m.avg.toFixed(2)}</div><div class="k">average, last 3 QA days (prev ${m.prev == null ? "no data" : m.prev.toFixed(2)}) · ${m.n} evals</div></div>
-      <div class="stat"><div class="v">${m.bottomq}</div><div class="k">in the bottom quarter (≤ ${D.bottom_cut ?? "no data"})</div></div>
-      <div class="stat"><div class="v">${m.not_connected}</div><div class="k">ranked, no completed connect in 14 days</div></div>
-    </div>
-    <p class="note">Instructor average = last 3 days with QA (evaluation-weighted), previous 3 in brackets. Ranked = 3 QA days, the latest within 14 days, active. Bottom quarter = ranked instructors at or below the 25th percentile network-wide (${D.bottom_cut ?? "no data"} on ${day(D.report_date)}).</p>
-    <h3>Instructors, lowest first${dlBtn("t-md","manager_" + pickMgr.replace(/\W+/g, "_"))}</h3>
-    ${table([["Instructor"],["Campus · subject"],["Last 3 QA days (prev)","num"],["Last completed connect"],["Connect on record"]], rows, "t-md")}
-    <h3>Connect history — ${D.month_view.from ? MON[dt(D.month_view.from).getMonth()] : ""}</h3><div id="hist"></div>
-    <p class="note">QA before and after a connect is an association, not proof that the connect caused a change.</p></div>`;
-  $("#mgrPick").onchange = e => { pickMgr = e.target.value; render(); };
-  barsChart($("#hist"), m.history);
+async function upload(file) {
+  if (!file) return;
+  const first = !J;
+  if (first) { $('#dropIdle').classList.add('hidden'); $('#dropBusy').classList.remove('hidden'); $('#busyText').textContent = 'Saving the export and building the drill-down…'; showErr('#err', ''); }
+  else { $('#busy').classList.remove('hidden'); showErr('#err2', ''); }
+  try {
+    const fd = new FormData(); fd.append('file', file, file.name);
+    const r = await fetch('/api/drill/upload', { method: 'POST', body: fd });
+    const j = await r.json().catch(() => ({ error: `The server answered ${r.status}.` }));
+    if (!r.ok || j.error) throw new Error(j.error || `The server answered ${r.status}.`);
+    if (j.db) saved = await fetch('/api/manager/saved').then(x => x.json()).catch(() => saved);
+    Object.assign(state, { u: null, s: null, m: null });
+    setup(j); shown(); render();
+    toast(j.db ? `Saved ${file.name}: the export of ${dLabel(j.data.meta.run_date)}.` : `Read ${file.name}. Not saved: the database isn’t set up.`, 5000);
+  } catch (e) {
+    if (first) { $('#dropIdle').classList.remove('hidden'); showErr('#err', e.message); } else showErr('#err2', e.message);
+  } finally { $('#dropBusy').classList.add('hidden'); $('#busy').classList.add('hidden'); }
 }
+$('#fileInput').addEventListener('change', e => upload(e.target.files[0]));
+$('#fileInput2').addEventListener('change', e => { upload(e.target.files[0]); e.target.value = ''; });
+const drop = $('#drop');
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => upload(e.dataTransfer.files[0]));
+$('#runDate').addEventListener('change', e => load(e.target.value, false));
 
-// 5. Month view
-function vMonth(el) {
-  const M = D.month_view;
-  const days = M.network.map(r => r.date);
-  // one row per campus: how long it has been on the list this month, and whether it still is
-  const span = x => x.from === x.to ? day(x.from) : (dt(x.from).getMonth() === dt(x.to).getMonth()
-    ? `${dt(x.from).getDate()}–${day(x.to)}` : `${day(x.from)} – ${day(x.to)}`);
-  const nextDay = s => { const d = dt(s); d.setDate(d.getDate() + 1); return `${d.getDate()} ${MON[d.getMonth()]}`; };
-  const wlGrid = t => {
-    const rows = M.watchlist[t];
-    if (!rows.length) return '<p class="note">No campus was on this list this month.</p>';
-    const today = Object.fromEntries((D.watchlist[t] ? D.watchlist[t].rows : []).map(r => [r.campus, r]));
-    const sorted = [...rows].map(r => ({...r, still: r.on.includes(M.to), last: r.on[r.on.length - 1]}))
-      .sort((a, b) => (b.still - a.still) || (b.days - a.days) || a.short.localeCompare(b.short));
-    const checked = Math.round((dt(M.to) - dt(M.watch_from)) / 864e5) + 1;
-    const head = `Days on the list in ${MON[dt(M.from).getMonth()]}` + (M.watch_from > M.from ? ` (of ${checked} checked)` : "");
-    return table([["Campus"],[head,"num"],["When"],["Now"],["Subject most affected"]], sorted.map(r => {
-      const tr = today[r.campus], subj = tr && tr.subject ? esc(tr.subject.subject) : '<span class="dim">—</span>';
-      const idl = r.still && M.to === D.report_date ? idleOf(r.campus) : null;
-      return `<tr><td>${r.still ? `<b>${esc(r.short)}</b>` : esc(r.short)}</td><td class="num">${r.days}</td><td>${r.spans.map(span).join(", ")}</td>
-        <td>${idl ? `<span class="warnt">No sessions since ${day(idl.last)}</span><br><span class="dim">Still listed on older sessions</span>`
-          : r.still ? '<span class="bad">Still on the list</span>' : `<span class="dim">Off since ${nextDay(r.last)}</span>`}</td><td>${r.still ? subj : '<span class="dim">—</span>'}</td></tr>`;
-    }), "t-wlh-" + t);
-  };
-  const mrows = M.managers.map(r => `<tr><td>${esc(r.manager)}</td><td class="num">${r.done} of ${r.total}</td>` +
-    r.days.map(x => `<td class="num" title="${day(x.date)}: ${x.done} done of ${x.n}${x.rate == null ? "" : ` (${x.rate}% of settled)`}; ${x.waiting} bottom-quarter not connected">${x.n ? x.done : '<span class="dim">·</span>'}</td>`).join("") +
-    `<td class="num">${r.days.length ? r.days[r.days.length - 1].waiting : 0}</td></tr>`);
-  const srows = M.subjects.filter((s, i) => showAllSubj || i < 25).map(s => `<tr><td>${esc(s.subject)}</td><td>${s.type}</td><td class="num">${n2(s.avg)}</td><td class="num">${n2(s.prev)}</td><td class="num">${s.n.toLocaleString()}</td><td class="num">${s.prev_n.toLocaleString()}</td><td class="num">${s.campuses}</td></tr>`);
-  const lastCov = [...M.network].reverse().find(r => r.sessions >= 50);
-  el.innerHTML = `<div class="panel"><h2 class="sec">Month view — ${day(M.from)} to ${day(M.to)}</h2>
-    <h3>Average QA score per day, all campuses</h3>
-    <p class="note">Each point is the average of every QA evaluation that day, out of 10, with lectures and practice drawn separately. Gaps are days without sessions (Sundays). Hollow points had fewer than 50 evaluations, so a handful of reviews decide them; they aren't joined to the line.</p>
-    <div class="legend"><span><i style="background:var(--s1)"></i>Lecture</span><span><i style="background:var(--s2)"></i>Practice</span></div><div class="chart" id="cAvg"></div>
-    <h3>Sessions with a completed QA evaluation, per day</h3>
-    <p class="note">Of the lecture and practice sessions held each day, the share with a completed QA evaluation in the QA rating data${lastCov ? ` (on ${day(lastCov.date)}: ${lastCov.with_qa.toLocaleString()} of ${lastCov.sessions.toLocaleString()}, ${lastCov.coverage}%)` : ""}. A dip means more sessions had no finished evaluation that day; it says nothing about how good they were, and nothing about instructors opening their reports. Hollow points had fewer than 50 sessions, so the percentage swings easily.</p><div class="chart" id="cCov"></div>${dlBtn(null, "network_daily", "net")}</div>
-    <div class="panel"><h2 class="sec">Watchlist history</h2><p class="note">Campuses that were on the watchlist at some point this month: their scores fell behind other campuses teaching the same subjects (last 14 days against the 14 before). Still on the list first. A campus with no sessions lately stays listed on its older sessions until new ones come in.${M.watch_from > M.from ? ` Checked from ${day(M.watch_from)}: each day needs 28 days of earlier QA data, and the saved data starts on ${day(M.data_from)}.` : ""}</p>
-    <h3>Lectures${dlBtn(null, "watchlist_lecture", "wl-lecture")}</h3>${wlGrid("lecture")}<h3>Practice${dlBtn(null, "watchlist_practice", "wl-practice")}</h3>${wlGrid("practice")}</div>
-    <div class="panel"><h2 class="sec">Capability Managers × day</h2><p class="note">Connects completed each day (hover for completion rate and bottom-quarter instructors still waiting for a connect). Last column: bottom-quarter instructors not connected in 14 days, on ${day(M.to)}.</p>
-    ${dlBtn("t-mx","managers_by_day")}${table([["Manager"],["Done","num"], ...days.map(d => [String(dt(d).getDate()), "num"]), ["Waiting","num"]], mrows, "t-mx")}</div>
-    <div class="panel"><h2 class="sec">Subjects — month so far vs the ${M.network.length} days before</h2><p class="note">Previous period: ${day(M.prev_from)} – ${day(M.prev_to)}.</p>
-    ${dlBtn("t-subj","subjects")}${table([["Subject"],["Type"],["Average","num"],["Before","num"],["Evals","num"],["Evals before","num"],["Campuses","num"]], srows, "t-subj")}
-    ${M.subjects.length > 25 ? `<p class="note">${showAllSubj ? `All ${M.subjects.length} subjects.` : `The 25 with the most evaluations, of ${M.subjects.length}.`} <button class="btn ghost small" id="subjAll">${showAllSubj ? "Show top 25" : "Show all"}</button></p>` : ""}</div>`;
-  const sa = $("#subjAll"); if (sa) sa.onclick = () => { showAllSubj = !showAllSubj; render(); };
-  lineChart($("#cAvg"), days, [{k: "lecture", n: "n_lecture", label: "Lecture", color: "var(--s1)"}, {k: "practice", n: "n_practice", label: "Practice", color: "var(--s2)"}], M.network, {fmt: v => v.toFixed(2), minN: 50});
-  lineChart($("#cCov"), days, [{k: "coverage", n: "sessions", label: "Coverage", color: "var(--s1)"}], M.network, {fmt: v => v + "%", min: 0, max: 100, count: "sessions", minN: 50});
+/* ---------- why a university has no session ---------- */
+const reasonBox = (name, r) => `<span class="reason" data-name="${esc(name)}"><select aria-label="Reason for ${esc(name)}"><option value="">No reason set</option>${OPTS.map(x => `<option${r && r.reason === x ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select><input placeholder="Note (optional)" maxlength="200" value="${esc(r ? r.note : '')}" aria-label="Note for ${esc(name)}"></span>`;
+async function saveReason(box) {
+  const name = box.dataset.name, reason = box.querySelector('select').value, note = box.querySelector('input').value.trim();
+  try {
+    const r = await fetch('/api/drill/reason', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ university: name, reason, note, date: RUN }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) throw new Error(j.error || `The server answered ${r.status}.`);
+    const y = window.scrollY;
+    await load(RUN, true);
+    window.scrollTo({ top: y });
+    const b = [...document.querySelectorAll('.reason')].find(x => x.dataset.name === name);
+    if (b && b.closest('details')) b.closest('details').open = true;
+    toast(reason ? `${name}: ${reason}. Left out of the daily email until its classes resume.` : `${name}: reason cleared.`, 4500);
+  } catch (e) { toast(e.message, 6000); }
 }
+document.addEventListener('change', e => { const b = e.target.closest('.reason'); if (b) saveReason(b); });
 
-// 6. Daily email
+/* ---------- daily email ---------- */
 function vEmail(el) {
-  const E = D.email;
-  el.innerHTML = `<div class="panel"><h2 class="sec">Daily email</h2>
-    <p class="note">Exactly the approved email, filled with ${wday(D.report_date)}’s numbers. Internal: it names instructors.</p>
-    <div class="emailbar">
-      <div class="field"><label for="eTo">To (QA leads)</label><input id="eTo" value="${esc(E.to.join(", "))}" placeholder="Set DAILY_TO on the server, or type addresses"></div>
-      <div class="field"><label for="eCc">CC (Capability Managers)</label><input id="eCc" value="${esc(E.cc.join(", "))}"></div>
+  const E = J.email;
+  el.innerHTML = `<div class="head"><h2>Daily email</h2><div class="sub">The three views summarised for ${dLabel(RUN)}: universities that need attention, subjects, and manager 1:1s. Internal: it names instructors.</div></div>
+    <div><div class="emailbar">
+      <div class="field"><label for="eTo">To (QA leads)</label><input id="eTo" value="${esc(E.to.join(', '))}" placeholder="Set DAILY_TO on the server, or type addresses"></div>
+      <div class="field"><label for="eCc">CC (Capability Managers)</label><input id="eCc" value="${esc(E.cc.join(', '))}"></div>
     </div>
     <div class="field" style="margin-bottom:12px"><label for="eSubj">Subject</label><input id="eSubj" style="width:100%" value="${esc(E.subject)}"></div>
-    <div class="emailbar"><button class="btn ghost" id="ePrev">Preview</button><button class="btn ghost" id="eCopy">Copy HTML</button><button class="btn" id="eSend">Send</button></div>
+    <div class="emailbar"><button class="btn ghost" id="ePrev" type="button">Open preview</button><button class="btn ghost" id="eCopy" type="button">Copy HTML</button><button class="btn" id="eSend" type="button">Send</button></div>
     <iframe class="preview" id="eFrame" title="Daily email preview"></iframe></div>`;
-  $("#eFrame").srcdoc = E.preview;
-  $("#ePrev").onclick = () => { const w = window.open("", "_blank"); if (w) { w.document.write(E.preview); w.document.close(); } };
-  $("#eCopy").onclick = async () => {
+  $('#eFrame').srcdoc = E.preview;
+  $('#ePrev').onclick = () => { const w = window.open('', '_blank'); if (w) { w.document.write(E.preview); w.document.close(); } };
+  $('#eCopy').onclick = async () => {
     try {
-      await navigator.clipboard.write([new ClipboardItem({"text/html": new Blob([E.html], {type: "text/html"}), "text/plain": new Blob([E.text], {type: "text/plain"})})]);
-      toast("Copied with formatting. Paste it into a new email.");
+      await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([E.html], { type: 'text/html' }), 'text/plain': new Blob([E.text], { type: 'text/plain' }) })]);
+      toast('Copied with formatting. Paste it into a new email.');
     } catch (e) {
-      try { await navigator.clipboard.writeText(E.html); toast("Copied the HTML source."); } catch (e2) { toast("Couldn’t copy: the browser blocked the clipboard."); }
+      try { await navigator.clipboard.writeText(E.html); toast('Copied the HTML source.'); } catch (e2) { toast('Couldn’t copy: the browser blocked the clipboard.'); }
     }
   };
-  $("#eSend").onclick = () => sendDaily(false);
+  $('#eSend').onclick = () => sendDaily(false);
 }
 async function sendDaily(force) {
-  const to = $("#eTo").value.trim(), cc = $("#eCc").value.trim(), subject = $("#eSubj").value.trim();
-  if (!to) { toast("Add at least one To address (QA leads)."); $("#eTo").focus(); return; }
+  const to = $('#eTo').value.trim(), cc = $('#eCc').value.trim(), subject = $('#eSubj').value.trim();
+  if (!to) { toast('Add at least one To address (QA leads).'); $('#eTo').focus(); return; }
   const mode = sendCfg && sendCfg.mode;
-  const what = mode === "test" ? `TEST mode: it goes only to ${sendCfg.test_to}.` : mode === "live" ? `LIVE: to ${to}${cc ? ` and CC ${cc.split(",").length} Capability Managers` : ""}.` : "Dry run: nothing is emailed.";
-  if (!force && !confirm(`Send the daily email for ${wday(D.report_date)}?\n\n${what}`)) return;
-  const b = $("#eSend"); b.disabled = true; b.textContent = "Sending…";
+  const what = mode === 'test' ? `TEST mode: it goes only to ${sendCfg.test_to}.` : mode === 'live' ? `LIVE: to ${to}${cc ? ` and CC ${cc.split(',').length} Capability Managers` : ''}.` : 'Dry run: nothing is emailed.';
+  if (!force && !confirm(`Send the daily email for ${dLabel(RUN)}?\n\n${what}`)) return;
+  const b = $('#eSend'); b.disabled = true; b.textContent = 'Sending…';
   try {
-    const r = await fetch("/api/manager/send", {method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({report_date: D.report_date, to, cc, subject, html: D.email.html, text: D.email.text, force})});
+    const r = await fetch('/api/drill/send', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: RUN, to, cc, subject, html: J.email.html, text: J.email.text, force }) });
     const j = await r.json().catch(() => ({}));
     if (r.status === 409 && j.duplicate) {
-      if (confirm(`The daily email for ${wday(D.report_date)} was already sent${j.last_sent ? " on " + new Date(j.last_sent).toLocaleString() : ""}. Send it again?`)) return sendDaily(true);
+      if (confirm(`The daily email for ${dLabel(RUN)} was already sent${j.last_sent ? ' on ' + new Date(j.last_sent).toLocaleString() : ''}. Send it again?`)) return sendDaily(true);
       return;
     }
     if (!r.ok || j.error) throw new Error(j.error || `The server answered ${r.status}.`);
-    toast(j.dry_run ? "Dry run OK: the request reached the sender; nothing was emailed." : j.test ? `Test email sent to ${j.to}.` : `Sent to ${j.to}.` + (j.warning ? " " + j.warning : ""), 5000);
+    toast(j.dry_run ? 'Dry run OK: the request reached the sender; nothing was emailed.' : j.test ? `Test email sent to ${j.to}.` : `Sent to ${j.to}.` + (j.warning ? ' ' + j.warning : ''), 5000);
   } catch (e) { toast(e.message, 7000); }
-  finally { b.disabled = false; b.textContent = "Send"; }
+  finally { b.disabled = false; b.textContent = 'Send'; }
 }
 
-// ------------------------------------------------------------------ charts
-function lineChart(el, days, series, rows, o = {}) {
-  const W = 960, H = 240, L = 44, R = 96, T = 12, B = 26, minN = o.minN || 0;
-  const thin = (r, s) => minN && (r[s.n] || 0) < minN;
-  const vals = series.flatMap(s => rows.map(r => r[s.k]).filter(v => v != null));
-  if (!vals.length) { el.innerHTML = '<p class="note">No data in this month.</p>'; return; }
-  let lo = o.min ?? Math.floor(Math.min(...vals) - 0.3), hi = o.max ?? Math.ceil(Math.max(...vals) + 0.3);
-  if (hi - lo < 1) hi = lo + 1;
-  const x = i => L + (days.length === 1 ? (W - L - R) / 2 : i * (W - L - R) / (days.length - 1));
-  const y = v => T + (hi - v) * (H - T - B) / (hi - lo);
-  const ticks = []; const step = (hi - lo) > 20 ? 25 : (hi - lo) > 4 ? 1 : 0.5;
-  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) ticks.push(+v.toFixed(2));
-  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(series.map(s => s.label).join(" and "))} by day">`;
-  svg += ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${o.min === 0 ? v + "%" : v}</text>`).join("");
-  days.forEach((d, i) => { if (i % Math.ceil(days.length / 12) === 0 || i === days.length - 1) svg += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--muted)">${dt(d).getDate()} ${MON[dt(d).getMonth()]}</text>`; });
-  const ends = [];
-  for (const s of series) {
-    let path = "", pen = false;
-    // days with few evaluations are drawn as hollow points, not joined, so they can't fake a jump
-    rows.forEach((r, i) => { const v = r[s.k]; if (v == null || thin(r, s)) { pen = false; return; } path += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); pen = true; });
-    svg += `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
-    rows.forEach((r, i) => { if (r[s.k] != null && thin(r, s)) svg += `<circle cx="${x(i)}" cy="${y(r[s.k])}" r="4" fill="var(--surface)" stroke="${s.color}" stroke-width="2"/>`; });
-    // a day on its own between gaps has no line to sit on: give it a small dot
-    const solid = i => i >= 0 && i < rows.length && rows[i][s.k] != null && !thin(rows[i], s);
-    rows.forEach((r, i) => { if (solid(i) && !solid(i - 1) && !solid(i + 1)) svg += `<circle cx="${x(i)}" cy="${y(r[s.k])}" r="3" fill="${s.color}"/>`; });
-    let li = -1; rows.forEach((r, i) => { if (r[s.k] != null && !thin(r, s)) li = i; });
-    if (li >= 0) {
-      svg += `<circle cx="${x(li)}" cy="${y(rows[li][s.k])}" r="4" fill="${s.color}" stroke="var(--surface)" stroke-width="2"/>`;
-      ends.push({y: y(rows[li][s.k]), x: x(li), text: `${s.label} ${o.fmt(rows[li][s.k])}`});
-    }
-  }
-  // direct labels at the end of each line, nudged apart when close
-  ends.sort((a, b) => a.y - b.y).forEach((e, i, arr) => { if (i && e.y - arr[i - 1].y < 14) e.y = arr[i - 1].y + 14; });
-  if (series.length > 1) ends.forEach(e => { svg += `<text x="${e.x + 10}" y="${e.y + 4}" font-size="12" fill="var(--ink)">${esc(e.text)}</text>`; });
-  svg += `<line id="xh" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" opacity="0"/>`;
-  svg += `<rect x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent" class="hit"/></svg><div class="tip"></div>`;
-  el.innerHTML = svg;
-  const sv = el.querySelector("svg"), tip = el.querySelector(".tip"), xh = el.querySelector("#xh");
-  sv.querySelector(".hit").addEventListener("mousemove", e => {
-    const rc = sv.getBoundingClientRect(), px = (e.clientX - rc.left) * W / rc.width;
-    const i = Math.max(0, Math.min(days.length - 1, Math.round((px - L) / ((W - L - R) / Math.max(1, days.length - 1)))));
-    xh.setAttribute("x1", x(i)); xh.setAttribute("x2", x(i)); xh.setAttribute("opacity", 1);
-    tip.innerHTML = `<b>${wday(days[i])}</b><br>` + series.map(s => `${s.label}: ${rows[i][s.k] == null ? "no data" : o.fmt(rows[i][s.k])} <span style="opacity:.75">(${(rows[i][s.n] || 0).toLocaleString()} ${o.count || "evals"})</span>`).join("<br>");
-    tip.style.left = (x(i) * rc.width / W) + "px"; tip.style.top = (T * rc.height / H + 20) + "px"; tip.classList.add("on");
-  });
-  sv.querySelector(".hit").addEventListener("mouseleave", () => { tip.classList.remove("on"); xh.setAttribute("opacity", 0); });
-}
-function barsChart(el, hist) {
-  const keys = [["done","Done","var(--done)"],["missed","Missed","var(--missed)"],["resched","Rescheduled","var(--resched)"],["pending","Not updated","var(--pending)"]];
-  if (!hist.some(h => keys.some(k => h[k[0]]))) { el.innerHTML = '<p class="note">No connects scheduled this month.</p>'; return; }
-  const W = 960, H = 170, L = 30, R = 10, T = 10, B = 24;
-  const max = Math.max(1, ...hist.map(h => keys.reduce((a, k) => a + h[k[0]], 0)));
-  const bw = (W - L - R) / Math.max(1, hist.length);
-  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Connects by day and status">`;
-  svg += `<line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="var(--grid)"/><text x="${L - 6}" y="${T + 8}" text-anchor="end" font-size="11" fill="var(--muted)">${max}</text>`;
-  hist.forEach((h, i) => {
-    let yy = H - B; const x0 = L + i * bw + 2, w = Math.max(2, bw - 4);
-    keys.forEach(([k, , c]) => { const v = h[k]; if (!v) return; const hh = v * (H - T - B) / max; yy -= hh; svg += `<rect x="${x0}" y="${yy}" width="${w}" height="${Math.max(0, hh - 2)}" rx="2" fill="${c}"/>`; });
-    if (i % Math.ceil(hist.length / 12) === 0 || i === hist.length - 1) svg += `<text x="${x0 + w / 2}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--muted)">${dt(h.date).getDate()}</text>`;
-    svg += `<rect x="${L + i * bw}" y="${T}" width="${bw}" height="${H - T - B}" fill="transparent" data-i="${i}" class="hb"/>`;
-  });
-  svg += `</svg><div class="tip"></div>`;
-  el.innerHTML = `<div class="legend">${keys.map(([, l, c]) => `<span><i class="sq" style="background:${c}"></i>${l}</span>`).join("")}</div><div class="chart">${svg}</div>`;
-  const ch = el.querySelector(".chart"), tip = ch.querySelector(".tip"), sv = ch.querySelector("svg");
-  ch.querySelectorAll(".hb").forEach(b => {
-    b.addEventListener("mouseenter", () => {
-      const h = hist[+b.dataset.i], rc = sv.getBoundingClientRect();
-      tip.innerHTML = `<b>${wday(h.date)}</b><br>` + keys.map(([k, l]) => `${l}: ${h[k]}`).join(" · ");
-      tip.style.left = ((L + (+b.dataset.i + 0.5) * bw) * rc.width / W) + "px"; tip.style.top = "30px"; tip.classList.add("on");
-    });
-    b.addEventListener("mouseleave", () => tip.classList.remove("on"));
-  });
-}
-
-// ------------------------------------------------------------------ CSV
-function dlBtn(tableId, name, kind) { return `<span class="dl"><button data-t="${tableId || ""}" data-k="${kind || ""}" data-n="${esc(name)}" onclick="dl(this)">Download CSV</button></span>`; }
-function csv(rows) { return rows.map(r => r.map(v => { const s = String(v ?? ""); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(",")).join("\n"); }
-function dl(b) {
-  let rows;
-  const M = D.month_view;
-  if (b.dataset.k === "net") rows = [["date","sessions","with_qa","coverage_pct","lecture_avg","lecture_evals","practice_avg","practice_evals"], ...M.network.map(r => [r.date, r.sessions, r.with_qa, r.coverage, r.lecture, r.n_lecture, r.practice, r.n_practice])];
-  else if (b.dataset.k.startsWith("wl-")) { const t = b.dataset.k.slice(3); rows = [["campus","date","on_watchlist"], ...M.watchlist[t].flatMap(r => M.network.map(n => [r.campus, n.date, r.on.includes(n.date) ? 1 : 0]))]; }
-  else {
-    const t = document.getElementById(b.dataset.t); if (!t) return;
-    rows = Array.from(t.querySelectorAll("tr")).filter(tr => !tr.classList.contains("noteline")).map(tr => Array.from(tr.children).map(c => c.innerText.replace(/\s*\n\s*/g, " ").trim()));
-  }
-  const blob = new Blob(["﻿" + csv(rows)], {type: "text/csv"});
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${b.dataset.n}_${D.report_date}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-}
+/* ---------- start: open the newest saved export, or ask for one ---------- */
+function showUpload() { if (!J) { $('#dropBusy').classList.add('hidden'); $('#dropIdle').classList.remove('hidden'); } }
+fetch('/api/manager/saved').then(r => r.json()).then(j => {
+  saved = j;
+  if (!j.configured) { if (j.error) $('#storeNote').textContent = `Saving is off: ${j.error} Check the Turso settings in Render.`; showUpload(); return; }
+  $('#storeNote').textContent = j.error ? `The database isn’t reachable: ${j.error}`
+    : `Saved to the database under its export date; the last ${j.keep_days} exports are kept. Contains instructor names: internal use only.`;
+  if (j.has_data && !j.error) load(null, false); else showUpload();
+}).catch(showUpload);
+fetch('/api/status').then(r => r.json()).then(j => {
+  sendCfg = j.send || null;
+  const s = sendCfg;
+  if (!s || !s.configured) { $('#sendStatus').innerHTML = '<span class="dot off"></span>Sending isn’t set up: use Copy HTML'; return; }
+  const mode = { dryrun: 'dry run (nothing is sent)', test: `test mode (only ${esc(s.test_to)})`, live: 'live' }[s.mode] || s.mode;
+  $('#sendStatus').innerHTML = `<span class="dot ${s.mode === 'live' ? 'on' : 'test'}"></span>Send: ${esc(s.provider_name)} · ${mode}`;
+}).catch(() => {});
 </script>
 </body>
 </html>

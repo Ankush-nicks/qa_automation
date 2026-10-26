@@ -16,3 +16,6 @@ bigquery/4_manager_activity.filled.sql
 *.db
 *.db-journal
 *.env
+
+# drill-down reference built from real data
+NIAT University Drill-down.*

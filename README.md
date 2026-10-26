@@ -18,10 +18,10 @@ fails, a rule-based draft is always available.
 - `llm.py` – writes the email with OpenAI gpt-4o-mini (default) or Claude, and checks the numbers it used
 - `templates/index.html` – the page
 - `google_apps_script/Code.gs` – the Google Apps Script that sends emails (from Gmail, or from Outlook through Microsoft Graph) and logs them in a Google Sheet (setup: `GOOGLE_SHEETS.md`, `OUTLOOK.md`)
-- `bundle.py` – page 2: reads the daily BigQuery zip (or its CSVs), checks files, columns and dates
-- `manager_engine.py` – page 2: campus analysis, watchlists, instructor last-3-QA-day averages, Capability Managers and connects, month view
-- `store.py` – page 2: saves each upload in a Turso database and keeps the last `KEEP_DAYS` days (`TURSO.md`)
-- `daily_email.py`, `templates/daily_email.html` – page 2: the approved daily email (HTML + plain text)
+- `bundle.py` – finds page 1's instructor file inside an uploaded zip
+- `drilldown.py` – page 2: reads `niat_drilldown_export.zip` (13 CSVs) into the drill-down data and works out the daily email's summary
+- `store.py` – saves uploads in a Turso database: page 1's file, and page 2's zip once per export date (the last `KEEP_DAYS` kept) (`TURSO.md`)
+- `drill_email.py`, `templates/drill_email.html` – page 2: the daily email (HTML + plain text)
 - `templates/manager.html` – page 2 (`/manager`)
 - `bigquery/` – the five BigQuery export queries and the daily scripts (see `bigquery/README.md`)
 - `rubrics/Updated_Rubrics_and_Scoring.xlsx` – the rubric workbook the AI uses
@@ -73,27 +73,22 @@ fails, a rule-based draft is always available.
    - To use Claude instead: `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`; `ANTHROPIC_MODEL` is optional and defaults to `claude-haiku-5-5`
 5. Deploy and open the URL.
 
-## Page 2: Manager analysis (`/manager`)
-Every morning:
-1. Cloud Shell: `bash ~/bigquery/daily_cloudshell.sh` downloads `qa_exports_YYYYMMDD.zip` (5 CSVs).
-2. Open **Manager analysis** and drop the zip. The app checks the four page-2 files (columns, date ranges) and
-   shows the checks at the top. With Turso set up the upload is saved: it replaces the days it covers, only the
-   last `KEEP_DAYS` days are kept, and the page opens on the saved data next time (no upload needed). Without
-   Turso nothing is stored.
-3. The report date defaults to the latest day in `qa_daily.csv` (yesterday); the month view to its month.
-   Changing either re-runs the analysis.
-4. Tabs: Act on these today · Campus analysis · Manager connect usage · Manager detail · Month view · Daily email.
-   Tables download as CSV.
-5. **Daily email**: Preview, Copy HTML (pastes with formatting into Outlook/Gmail) or Send. Send follows
-   `SEND_MODE` (dry run → test → live) and logs to the Sent log; a second live send for the same report date
-   asks for confirmation.
-6. Page 1 accepts the same zip (it uses `instructor_qa_last3_export.csv` inside it). With Turso, one upload on
-   either page saves the data for both, and both open on the saved data.
+## Page 2: University drill-down (`/manager`)
+Every day:
+1. Run the BigQuery drill-down export and download `niat_drilldown_export.zip` (13 CSVs, `01_universities.csv` …
+   `13_tickets_month.csv`).
+2. Open **University drill-down** and drop the zip. The export date is the latest class day in
+   `02_section_day.csv`. With Turso set up, the zip is saved under that date, the last `KEEP_DAYS` exports are
+   kept, and the page opens on the newest one (pick an earlier one under Export). Without Turso nothing is stored.
+3. Views: **Universities** (all → one university → one section: days, classes with issues, attendance, feedback,
+   semester progress), **Subjects** (weekly QA, rubrics, zero scores), **Managers** (1:1 coverage per Capability
+   Manager), **Daily email**.
+4. A university with no session today can be given a reason (exams, holiday…). It is then left out of the
+   email's "no session today" table until its classes resume; the reason clears itself.
+5. **Daily email**: the three views summarised. Preview, Copy HTML or Send. Send follows `SEND_MODE`
+   (dry run → test → live) and logs to the Sent log; a second live send for the same export date asks first.
 
-Rules: averages are SUM(score_sum) ÷ SUM(scored) with their counts, never an average of averages; missing data
-shows as "no data", never 0. Connects on the report date are provisional, so managers are judged on the days
-before. Managers with fewer than 3 instructors are listed under the table. A score change after a connect is an
-association, not proof of effect.
+Rules: averages are rebuilt from sums and counts, never an average of averages; "null" means no value.
 
 ## Run locally
 ```

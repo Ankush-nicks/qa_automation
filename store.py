@@ -424,6 +424,21 @@ class Store:
             self._files[key] = c
         return c[1], c[2], info
 
+    def list_files(self, prefix: str) -> list[dict]:
+        """Saved files whose key starts with prefix, newest export first (no data)."""
+        self._setup()
+        like = _lit(prefix.replace("%", "") + "%", False)
+        rows = self.db.query(f"SELECT key, filename, export_date, saved_at, size FROM files WHERE key LIKE {like} "
+                             "ORDER BY export_date DESC, key DESC")
+        return [dict(zip(["key", "filename", "export_date", "saved_at", "size"], r)) for r in rows]
+
+    def delete_files(self, keys: list[str]):
+        if keys:
+            self._setup()
+            self.db.transaction([f"DELETE FROM files WHERE key = {_lit(k, False)}" for k in keys])
+            for k in keys:
+                self._files.pop(k, None)
+
     # ---- why a campus has no sessions (page 2): one row per campus, for its current quiet stretch
     def reasons(self) -> dict:
         self._setup()

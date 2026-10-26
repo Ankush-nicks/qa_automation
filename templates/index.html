@@ -202,7 +202,7 @@ td.num{white-space:nowrap}
 <div class="wrap">
   <header class="top">
     <div>
-      <nav class="pagenav" aria-label="Pages"><a aria-current="page" href="/">Instructor emails</a><a href="/manager">Manager analysis</a></nav>
+      <nav class="pagenav" aria-label="Pages"><a aria-current="page" href="/">Instructor emails</a><a href="/manager">University drill-down</a></nav>
       <h1>QA email drafts</h1>
       <p class="sub">An instructor is flagged when each of their last 3 days with QA reviews averages below the threshold; days without reviews are skipped. Flagged instructors get an email drafted from their scores and the rubrics.</p>
     </div>
@@ -388,7 +388,7 @@ async function analyze(first){
     state.useSaved=true; state.file=null; state.prevFile=null;
     if(sending&&j.saved){
       const errs=(j.saved.errors||[]);
-      toast(errs.length?errs.join(" "):`Saved for both pages${j.saved.manager?"":" (page 1 only: this file has no page-2 data)"}.`);
+      toast(errs.length?errs.join(" "):"Saved: this page opens on this file until you upload a newer one.");
     }
   }
   if(first) loadSentLog();
@@ -415,7 +415,7 @@ fetch("/api/manager/saved").then(r=>r.json()).then(j=>{
   if(!(j.configured&&j.instructor_file&&!j.error)) showUpload();
   if(!j.configured){ if(j.error) $("storeNote").textContent=`Saving is off: ${j.error} Check the Turso settings in Render.`; return; }
   $("storeNote").textContent = j.error ? `The database isn’t reachable: ${j.error}`
-    : "Saved to the database: the daily zip uploaded here or on Manager analysis is used by both pages. Only the selected instructor’s scores are sent to the AI when you write an email.";
+    : "Saved to the database: this page opens on the last file uploaded here. Only the selected instructor’s scores are sent to the AI when you write an email.";
   if(j.instructor_file && !j.error && !state.file && !state.data){ state.useSaved=true; analyze(true); }
 }).catch(showUpload);
 

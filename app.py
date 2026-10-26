@@ -5,6 +5,7 @@ instructor's email with an LLM (falls back to a rule-based draft)."""
 from __future__ import annotations
 
 import base64
+import gzip
 import hmac
 import io
 import json
@@ -22,12 +23,11 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 
 import pandas as pd
 
-import daily_email
+import drill_email
+import drilldown
 import llm
 import store as dbstore
-from bundle import (INSTRUCTOR_FILE, BundleError, collect, export_date, instructor_file, prepare, raw_frames,
-                    read_bundle, upload_export_date)
-from manager_engine import Engine
+from bundle import INSTRUCTOR_FILE, collect, instructor_file, upload_export_date
 from managers import load_managers, match_managers
 from qa_engine import analyze, read_export
 from roster import parse_roster, read_roster, split_cc
@@ -454,40 +454,25 @@ def manager_page():
     return send_from_directory(BASE / "templates", "manager.html")
 
 
-# Turso keeps the uploads (store.py): each upload overrides what it covers, KEEP_DAYS days are kept,
-# and the page opens on the saved data. Without TURSO_DATABASE_URL nothing is stored.
+# Turso keeps the uploads (store.py). Page 1's instructor file is one saved file; page 2's drill-down
+# zip is saved once per run date, and only the newest KEEP_DAYS of those are kept.
 try:
     STORE = dbstore.from_env()
     STORE_ERROR = ""
 except dbstore.StoreError as e:
     STORE, STORE_ERROR = None, str(e)
-_saved = {"version": None, "bundle": None}
-_answers: dict = {}  # finished page-2 answers for the saved data, by (version, date, month, host)
-
-
-def _saved_bundle():
-    """The saved data, parsed once per upload. None when nothing is saved yet."""
-    got = STORE.load()
-    if not got:
-        return None
-    frames, meta = got
-    if _saved["version"] != meta["version"]:
-        up = pd.Timestamp(meta["updated_at"]).tz_convert("Asia/Kolkata")
-        first = (f"Saved data: QA from {pd.Timestamp(meta['cutoff']):%d %b} to {pd.Timestamp(meta['latest_qa']):%d %b} "
-                 f"(the last {meta.get('keep_days', '30')} days), updated {up:%d %b %H:%M} IST"
-                 + (f" from {meta['last_file']}" if meta.get("last_file") else "") + ".")
-        _saved["bundle"] = prepare(frames, meta.get("export_date") or None, first_check=first)
-        _saved["version"] = meta["version"]
-    return _saved["bundle"]
-
 
 INSTRUCTOR_KEY = "instructor_qa"
+DRILL_PREFIX = "drill:"
+_drill: dict = {}     # run date -> (saved_at, data) built from the saved zip
+_answers: dict = {}   # finished page-2 answers, by (date, saved_at, reasons, host)
+_unsaved: dict = {}   # without the database: the last upload, kept in memory
 
 
-def _save_upload(ups: list[tuple[str, bytes]], ingest: bool = True) -> dict:
-    """Saves what an upload holds for both pages: page 1's instructor file (from a zip, or the file
-    itself) and, from a zip, page 2's four files. Never fails the request: problems come back as text."""
-    out = {"instructor": None, "manager": None, "errors": []}
+def _save_upload(ups: list[tuple[str, bytes]]) -> dict:
+    """Saves page 1's instructor file (from a zip, or the file itself). Never fails the request:
+    problems come back as text."""
+    out = {"instructor": None, "errors": []}
     exp = upload_export_date(ups)
     files = collect(ups)
     try:
@@ -498,137 +483,169 @@ def _save_upload(ups: list[tuple[str, bytes]], ingest: bool = True) -> dict:
         elif len(ups) == 1 and not zipfile.is_zipfile(io.BytesIO(ups[0][1])):
             out["instructor"] = STORE.save_file(INSTRUCTOR_KEY, ups[0][0], ups[0][1], exp)
     except dbstore.StoreError as e:
-        out["errors"].append(f"Page 1’s file wasn’t saved: {e}")
-    if ingest:
-        try:
-            frames, _ = raw_frames(ups)
-            out["manager"] = STORE.ingest(frames, exp, ", ".join(n for n, _ in ups))
-        except BundleError:
-            pass  # not a page-2 export (e.g. page 1's CSV on its own)
-        except dbstore.StoreError as e:
-            out["errors"].append(f"Page 2’s data wasn’t saved: {e}")
+        out["errors"].append(f"The file wasn’t saved: {e}")
     return out
 
 
 @app.get("/api/manager/saved")
 def api_manager_saved():
+    """What is saved, for both pages: page 1's instructor file and page 2's drill-down dates."""
     if not STORE:
-        return jsonify(configured=False, error=STORE_ERROR)
+        return jsonify(configured=False, error=STORE_ERROR, dates=[])
     try:
-        meta = STORE.meta()
-        return jsonify(configured=True, has_data=bool(meta.get("version")), latest_qa=meta.get("latest_qa"),
-                       cutoff=meta.get("cutoff"), updated_at=meta.get("updated_at"), keep_days=dbstore.keep_days(),
-                       uploads=STORE.uploads(10), instructor_file=STORE.file_info(INSTRUCTOR_KEY))
+        dates = [{"date": f["export_date"], "file": f["filename"], "saved_at": f["saved_at"]}
+                 for f in STORE.list_files(DRILL_PREFIX)]
+        return jsonify(configured=True, has_data=bool(dates), dates=dates, keep_days=dbstore.keep_days(),
+                       instructor_file=STORE.file_info(INSTRUCTOR_KEY))
     except dbstore.StoreError as e:
-        return jsonify(configured=True, has_data=False, error=str(e))
+        return jsonify(configured=True, has_data=False, dates=[], error=str(e))
 
 
-@app.post("/api/manager/analyze")
-def api_manager_analyze():
-    """The zip (or the four CSVs) -> everything page 2 shows, plus the daily email. With the database
-    set up, an upload is saved first and the analysis runs on the saved data; no upload = saved data."""
-    saved = None
-    reasons = {}
-    try:
-        ups = [(f.filename, f.read()) for f in request.files.getlist("files") if f and f.filename]
-        if STORE:
-            reasons = STORE.reasons()
-            if ups:
-                raw, found = raw_frames(ups)
-                saved = STORE.ingest(raw, upload_export_date(ups), ", ".join(n for n, _ in ups))
-                saved["also"] = _save_upload(ups, ingest=False)
-            b = _saved_bundle()
-            if b is None:
-                raise BundleError("Nothing is saved yet. Upload today’s qa_exports_YYYYMMDD.zip.")
-            if ups:
-                b = {**b, "has_instructor_file": instructor_file(found) is not None}
-            else:
-                key = (_saved["version"], request.form.get("report_date") or "", request.form.get("month") or "",
-                       request.host_url, json.dumps(reasons, sort_keys=True))
-                if key in _answers:
-                    return Response(_answers[key], mimetype="application/json")
-        else:
-            if not ups:
-                raise BundleError("Choose the daily qa_exports_YYYYMMDD.zip first.")
-            b = read_bundle(ups)
-        eng = Engine({k: v.copy() for k, v in b["frames"].items()}, manager_map())
-        out = eng.analyze(request.form.get("report_date") or None, request.form.get("month") or None,
-                          reasons=reasons)
-    except (BundleError, ValueError) as e:
-        return jsonify(error=str(e), saved=saved), 400
-    except dbstore.StoreError as e:
-        return jsonify(error=f"The database step failed: {e}", saved=saved), 502
-    except Exception as e:  # noqa: BLE001
-        app.logger.exception("manager analysis failed")
-        return jsonify(error=f"The analysis failed ({e}). Check the files are today’s BigQuery export."), 500
-    Y = pd.Timestamp(out["report_date"])
-    ms = pd.Timestamp(out["month"] + "-01")
-    out["manager_details"] = {m: eng.manager_detail(Y, m, ms) for m in out["managers"]}
-    out.pop("manager_detail", None)
+def _drill_data(run: str | None) -> tuple[dict, dict]:
+    """(data, info) for a saved run date (the newest when run is None)."""
+    if not STORE:
+        if not _unsaved:
+            raise drilldown.DrillError("Upload niat_drilldown_export.zip first.")
+        return _unsaved["data"], _unsaved["info"]
+    saved = STORE.list_files(DRILL_PREFIX)
+    if not saved:
+        raise drilldown.DrillError("Nothing is saved yet. Upload niat_drilldown_export.zip.")
+    info = next((f for f in saved if f["export_date"] == run), None) if run else saved[0]
+    if not info:
+        raise drilldown.DrillError(f"There is no saved export for {run}.")
+    c = _drill.get(info["export_date"])
+    if not c or c[0] != info["saved_at"]:
+        _, raw, _ = STORE.get_file(info["key"])
+        c = (info["saved_at"], drilldown.build(raw))
+        if len(_drill) >= 4:
+            _drill.clear()
+        _drill[info["export_date"]] = c
+    return c[1], info
+
+
+def _gz_json(body: str) -> Response:
+    raw = body.encode("utf-8")
+    if "gzip" in (request.headers.get("Accept-Encoding") or "") and len(raw) > 2048:
+        r = Response(gzip.compress(raw, 6), mimetype="application/json")
+        r.headers["Content-Encoding"] = "gzip"
+        r.headers["Vary"] = "Accept-Encoding"
+        return r
+    return Response(raw, mimetype="application/json")
+
+
+def _drill_answer(D: dict, info: dict, reasons: dict) -> str:
+    applied = drilldown.apply_reasons(D, reasons)
+    S = drilldown.summary(D, applied)
     link = (os.getenv("APP_URL", "").strip().rstrip("/") or request.host_url.rstrip("/")) + "/manager"
-    out["email"] = {"subject": daily_email.subject(out), "preview": daily_email.render_html(out, link, preview=True),
-                    "html": daily_email.render_html(out, link, preview=False),
-                    "text": daily_email.render_text(out, link), **_daily_recipients()}
-    out["bundle"] = {"checks": b["checks"], "ranges": b["ranges"], "export_date": b["export_date"],
-                     "has_instructor_file": b["has_instructor_file"]}
-    out["saved"] = saved
-    out["db"] = bool(STORE)
-    out["reason_options"] = REASONS if STORE else []
-    body = json.dumps(_clean(out), ensure_ascii=False)
-    if STORE and not ups:
-        # opening the page again (or switching back to it) is instant until the next upload
-        if len(_answers) >= 12 or any(k[0] != _saved["version"] for k in _answers):
-            _answers.clear()
-        _answers[key] = body
-    return Response(body, mimetype="application/json")
+    out = {"data": D, "reasons": applied, "reason_options": REASONS if STORE else [],
+           "file": {"name": info.get("filename"), "saved_at": info.get("saved_at"), "date": D["meta"]["run_date"]},
+           "db": bool(STORE),
+           "email": {"subject": drill_email.subject(S), "preview": drill_email.render_html(S, link, preview=True),
+                     "html": drill_email.render_html(S, link, preview=False),
+                     "text": drill_email.render_text(S, link), **_daily_recipients()}}
+    return json.dumps(_clean(out), ensure_ascii=False, separators=(",", ":"))
+
+
+@app.get("/api/drill")
+def api_drill():
+    """Everything page 2 shows for a saved run date (?date=YYYY-MM-DD, default the newest), plus the email."""
+    try:
+        D, info = _drill_data(request.args.get("date") or None)
+        reasons = STORE.reasons() if STORE else {}
+        key = (info.get("export_date"), info.get("saved_at"), json.dumps(reasons, sort_keys=True), request.host_url)
+        if key not in _answers:
+            if len(_answers) >= 6:
+                _answers.clear()
+            _answers[key] = _drill_answer(D, info, reasons)
+        return _gz_json(_answers[key])
+    except drilldown.DrillError as e:
+        return jsonify(error=str(e)), 400
+    except dbstore.StoreError as e:
+        return jsonify(error=f"The database step failed: {e}"), 502
+    except Exception as e:  # noqa: BLE001
+        app.logger.exception("drill-down failed")
+        return jsonify(error=f"The drill-down couldn’t be built ({e})."), 500
+
+
+@app.post("/api/drill/upload")
+def api_drill_upload():
+    """Saves niat_drilldown_export.zip under its run date (the latest class day in it) and returns
+    that date's drill-down. An older run date is added beside the newer ones, never over them."""
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return jsonify(error="Choose niat_drilldown_export.zip first."), 400
+    data = f.read()
+    try:
+        if not drilldown.is_drill_zip(data):
+            raise drilldown.DrillError("This isn’t the drill-down export: the zip needs the 13 files "
+                                       "01_universities.csv … 13_tickets_month.csv.")
+        D = drilldown.build(data)
+        run = D["meta"]["run_date"]
+        if not STORE:
+            _unsaved.update(data=D, info={"filename": f.filename, "saved_at": None, "export_date": run})
+            return _gz_json(_drill_answer(D, _unsaved["info"], {}))
+        STORE.save_file(DRILL_PREFIX + run, f.filename, data, run)
+        saved = STORE.list_files(DRILL_PREFIX)
+        STORE.delete_files([x["key"] for x in saved[dbstore.keep_days():]])
+        _answers.clear()
+        D2, info = _drill_data(run)
+        return _gz_json(_drill_answer(D2, info, STORE.reasons()))
+    except drilldown.DrillError as e:
+        return jsonify(error=str(e)), 400
+    except dbstore.StoreError as e:
+        return jsonify(error=f"The database step failed: {e}"), 502
+    except Exception as e:  # noqa: BLE001
+        app.logger.exception("drill-down upload failed")
+        return jsonify(error=f"The zip was read, but couldn’t be processed ({e})."), 500
 
 
 REASONS = ["Exams", "Holiday", "Break / vacation", "Event", "Other"]
 
 
-@app.post("/api/manager/reason")
-def api_manager_reason():
-    """Marks why a campus has no sessions (or clears it with an empty reason). The reason is tied to
-    the campus's last session, so it stops applying by itself once sessions resume."""
+@app.post("/api/drill/reason")
+def api_drill_reason():
+    """Marks why a university has no session today (or clears it with an empty reason). The reason is
+    tied to the university's last class, so it stops applying by itself once classes resume."""
     if not STORE:
         return jsonify(error="Reasons need the database (TURSO_DATABASE_URL)."), 400
     p = request.get_json(silent=True) or {}
-    campus, reason = str(p.get("campus") or "").strip(), str(p.get("reason") or "").strip()
+    name, reason = str(p.get("university") or "").strip(), str(p.get("reason") or "").strip()
     note = str(p.get("note") or "").strip()[:200]
     try:
         if not reason:
-            STORE.clear_reason(campus)
+            STORE.clear_reason(name)
+            _answers.clear()
             return jsonify(ok=True, cleared=True)
         if reason not in REASONS:
             return jsonify(error=f"Unknown reason {reason!r}."), 400
-        b = _saved_bundle()
-        if b is None:
-            return jsonify(error="Nothing is saved yet."), 400
-        q = b["frames"]["qa_daily"]
-        Y = pd.Timestamp(p.get("report_date")) if p.get("report_date") else q.session_date.max()
-        mine = q[(q.campus_name == campus) & (q.session_date <= Y)]
-        if not len(mine) and campus not in set(q.campus_name):
-            return jsonify(error=f"{campus} isn’t in the saved data."), 400
-        if (mine.session_date == Y).any():
-            return jsonify(error=f"{campus} had sessions on {Y:%d %b}, so it needs no reason."), 400
-        last = mine.session_date.max()
-        STORE.set_reason(campus, reason, note, f"{last:%Y-%m-%d}" if len(mine) else None, f"{Y:%Y-%m-%d}")
+        D, _ = _drill_data(p.get("date") or None)
+        u = next((x for x in D["universities"] if x["name"] == name), None)
+        if not u:
+            return jsonify(error=f"{name} isn’t in this export."), 400
+        run = D["meta"]["run_date"]
+        if any(d[0] == run and d[1] for s in u["sections"] for d in s["days"]):
+            return jsonify(error=f"{name} has sessions on {run}, so it needs no reason."), 400
+        STORE.set_reason(name, reason, note, drilldown.last_session(u), run)
+        _answers.clear()
+    except drilldown.DrillError as e:
+        return jsonify(error=str(e)), 400
     except dbstore.StoreError as e:
         return jsonify(error=f"The database step failed: {e}"), 502
     return jsonify(ok=True)
 
 
-@app.post("/api/manager/send")
-def api_manager_send():
-    """Sends the daily email through page 1's sender. One live send per report date: the Sent log
+@app.post("/api/drill/send")
+def api_drill_send():
+    """Sends the daily email through page 1's sender. One live send per run date: the Sent log
     refuses a second one (within SEND_REPEAT_DAYS) until it's confirmed on the page."""
     p = request.get_json(silent=True) or {}
-    day = str(p.get("report_date") or "").strip()
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
-        return jsonify(error="The email has no report date. Run the analysis again."), 400
+    run = str(p.get("date") or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", run):
+        return jsonify(error="The email has no run date. Open the page again."), 400
     return deliver({"to": p.get("to"), "cc": p.get("cc"), "subject": p.get("subject"), "html": p.get("html"),
-                    "text": p.get("text"), "instructor_id": f"daily-{day}", "instructor_name": f"Daily QA email {day}", "instructor_email": "",
-                    "subject_area": "Daily email", "sender_name": "Central QA Team", "force": bool(p.get("force"))})
+                    "text": p.get("text"), "instructor_id": f"drill-{run}", "instructor_name": f"Drill-down email {run}",
+                    "instructor_email": "", "subject_area": "Daily email", "sender_name": "Central QA Team",
+                    "force": bool(p.get("force"))})
 
 
 @app.post("/api/roster")

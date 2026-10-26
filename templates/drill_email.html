@@ -1,0 +1,98 @@
+{#- Daily email for the University Drill-down. HTML tables and inline styles only, so it renders in
+    Gmail and Outlook. Colours follow the website: graphite ink, blue-grey structure, red for problems. -#}
+{%- set INK = "#2B3039" -%}{%- set MUTED = "#6B7280" -%}{%- set RULE = "#E3E6EB" -%}{%- set SOFT = "#EEF0F3" -%}
+{%- set BLUE = "#4A5F8E" -%}{%- set RED = "#B4483E" -%}{%- set AMBER = "#A8742A" -%}{%- set GREEN = "#3D7D5E" -%}
+{%- set TH = "padding:6px 8px;font-size:12px;color:" ~ MUTED ~ ";font-weight:normal;border-bottom:1px solid " ~ RULE ~ ";text-align:left;" -%}
+{%- set TD = "padding:6px 8px;border-bottom:1px solid " ~ SOFT ~ ";vertical-align:top;" -%}
+{%- set R = "text-align:right;white-space:nowrap;" -%}
+{%- macro h2(text) -%}<div style="font-size:17px;font-weight:bold;color:{{ INK }};margin:0 0 4px;">{{ text }}</div>{%- endmacro -%}
+{%- macro h3(text, dot) -%}<div style="font-size:14px;font-weight:bold;color:{{ INK }};margin:18px 0 6px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:{{ dot }};margin-right:8px;vertical-align:1px;"></span>{{ text|safe }}</div>{%- endmacro -%}
+{%- macro note(text) -%}<div style="font-size:12px;color:{{ MUTED }};margin-top:6px;line-height:1.5;">{{ text|safe }}</div>{%- endmacro -%}
+{%- macro na(v, suffix="") -%}{% if v is none %}<span style="color:{{ MUTED }};">—</span>{% else %}{{ v }}{{ suffix }}{% endif %}{%- endmacro -%}
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ subject }}</title></head>
+<body style="margin:0;padding:24px 10px;background:#F5F6F8;font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:{{ INK }};">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:760px;margin:0 auto;background:#ffffff;border:1px solid {{ SOFT }};border-radius:6px;">
+{% if preview %}
+<tr><td style="padding:12px 24px;background:#F8F9FB;border-bottom:1px solid {{ RULE }};font-size:13px;color:{{ MUTED }};border-radius:6px 6px 0 0;">
+<div><b>Subject:</b> {{ subject }}</div>
+<div><b>To:</b> QA leads, Capability Managers (internal — contains instructor names)</div>
+</td></tr>
+{% endif %}
+
+<tr><td style="padding:22px 24px 6px;">
+<div style="font-size:21px;font-weight:bold;">NIAT University Drill-down — {{ run_day }}</div>
+<div style="font-size:13px;color:{{ MUTED }};margin-top:4px;line-height:1.5;">Classes, recordings, QA and attendance cover the last 14 days ({{ range14 }}). {{ f.universities }} of {{ f.all_universities }} universities had classes.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:14px;">
+<tr>
+{% for k, v, s in figs %}<td style="padding:4px 12px 4px {{ '0' if loop.first else '12px' }};{% if not loop.first %}border-left:1px solid {{ SOFT }};{% endif %}vertical-align:top;">
+<div style="font-size:11.5px;color:{{ MUTED }};">{{ k }}</div><div style="font-size:19px;font-weight:bold;line-height:1.3;">{{ v }}</div><div style="font-size:11.5px;color:{{ MUTED }};">{{ s }}</div></td>
+{% endfor %}</tr></table>
+</td></tr>
+
+<tr><td style="padding:18px 24px 6px;border-top:1px solid {{ RULE }};">
+{{ h2("1. Universities — needs attention") }}
+
+{{ h3(no_today|length ~ " universit" ~ ("y has" if no_today|length == 1 else "ies have") ~ " no session today (" ~ run_day ~ ")" if no_today else "Every university with classes in the last 14 days has a session today", AMBER if no_today else GREEN) }}
+{% if no_today %}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;">
+<tr><td style="{{ TH }}">University</td><td style="{{ TH }}">Last session</td><td style="{{ TH }}{{ R }}">Sections planned for {{ next_day }}</td></tr>
+{% for r in no_today %}<tr><td style="{{ TD }}">{{ r.name }}</td><td style="{{ TD }}">{{ r.last_day }}</td><td style="{{ TD }}{{ R }}">{{ r.plan }} of {{ r.act }}</td></tr>{% endfor %}
+</table>{% endif %}
+{% if known %}{{ note("Not listed, reason known: " ~ known) }}{% endif %}
+
+{% if s.nothing_planned %}{{ h3(s.nothing_planned|length ~ " universit" ~ ("y has" if s.nothing_planned|length == 1 else "ies have") ~ " nothing planned for " ~ next_day, RED) }}
+<div style="font-size:13px;line-height:1.5;">{{ s.nothing_planned|join(", ") }}</div>{% endif %}
+
+{% if s.some_planned %}{{ h3(s.some_planned|length ~ " universit" ~ ("y has" if s.some_planned|length == 1 else "ies have") ~ " only some sections planned for " ~ next_day, AMBER) }}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;">
+<tr><td style="{{ TH }}">University</td><td style="{{ TH }}{{ R }}">Sections planned</td></tr>
+{% for r in s.some_planned[:12] %}<tr><td style="{{ TD }}">{{ r.name }}</td><td style="{{ TD }}{{ R }}">{{ r.plan }} of {{ r.act }}</td></tr>{% endfor %}
+</table>{% if s.some_planned|length > 12 %}{{ note("and " ~ (s.some_planned|length - 12) ~ " more on the page.") }}{% endif %}{% endif %}
+
+{% if s.not_done %}{{ h3("{:,}".format(s.not_done_total) ~ " sessions scheduled till " ~ run_short ~ " are not marked done", RED) }}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;">
+<tr><td style="{{ TH }}">University</td><td style="{{ TH }}">Semester</td><td style="{{ TH }}{{ R }}">Sections affected</td><td style="{{ TH }}{{ R }}">Scheduled till {{ run_short }}</td><td style="{{ TH }}{{ R }}">Not marked done</td></tr>
+{% for g in s.not_done[:10] %}<tr><td style="{{ TD }}">{{ g.uni }}</td><td style="{{ TD }}white-space:nowrap;">{{ g.sem|replace("Semester ", "Sem ") }}</td><td style="{{ TD }}{{ R }}">{{ g.gs }} of {{ g.secs }}</td><td style="{{ TD }}{{ R }}">{{ "{:,}".format(g.sched) }}</td><td style="{{ TD }}{{ R }}color:{{ RED }};font-weight:bold;">{{ "{:,}".format(g.gap) }}</td></tr>{% endfor %}
+</table>
+{{ note(("Top 10 of " ~ s.not_done|length ~ ". " if s.not_done|length > 10 else "") ~ "Current semester of each batch. A session counts when its own date in the schedule is on or before " ~ run_short ~ " and it is still Pending, Started or not marked.") }}{% endif %}
+
+{% if s.low_qa %}{{ h3(s.low_qa|length ~ " active instructor" ~ (" is" if s.low_qa|length == 1 else "s are") ~ " below 5 QA", RED) }}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;">
+<tr><td style="{{ TH }}">Instructor</td><td style="{{ TH }}{{ R }}">QA</td><td style="{{ TH }}{{ R }}">n</td><td style="{{ TH }}">Subject</td><td style="{{ TH }}">Capability manager</td><td style="{{ TH }}">Taught at, 14 days</td></tr>
+{% for i in s.low_qa[:15] %}<tr><td style="{{ TD }}">{{ i.name }}</td><td style="{{ TD }}{{ R }}color:{{ RED }};font-weight:bold;">{{ i.qa }}</td><td style="{{ TD }}{{ R }}">{{ i.n }}</td><td style="{{ TD }}">{{ i.subject|title if i.subject else "—" }}</td><td style="{{ TD }}">{{ i.manager }}</td><td style="{{ TD }}">{{ i.taught_at or "no session" }}</td></tr>{% endfor %}
+</table>
+{{ note(("Lowest 15 of " ~ s.low_qa|length ~ "; the rest are on the page. " if s.low_qa|length > 15 else "") ~ "QA = the instructor’s average over their own last 3 days with a QA score, across all universities. n = QA scores in those days.") }}{% endif %}
+</td></tr>
+
+<tr><td style="padding:18px 24px 6px;border-top:1px solid {{ RULE }};">
+{{ h2("2. Subjects — QA in the week of " ~ last_wk ~ " against the week before") }}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;margin-top:8px;">
+<tr><td style="{{ TH }}">Subject</td><td style="{{ TH }}{{ R }}">Avg QA</td><td style="{{ TH }}{{ R }}">Week before</td><td style="{{ TH }}{{ R }}">Change</td><td style="{{ TH }}">Weakest lecture rubric</td><td style="{{ TH }}">Weakest practice rubric</td><td style="{{ TH }}{{ R }}">Not marked done</td></tr>
+{% for r in s.subjects %}<tr><td style="{{ TD }}font-weight:bold;">{{ r.cat }}</td><td style="{{ TD }}{{ R }}">{{ na(r.now) }}</td><td style="{{ TD }}{{ R }}color:{{ MUTED }};">{{ na(r.prev) }}</td>
+<td style="{{ TD }}{{ R }}{% if r.change is not none and r.change < 0 %}color:{{ RED }};font-weight:bold;{% endif %}">{% if r.change is none %}—{% else %}{{ "%+.2f"|format(r.change)|replace("-", "−") }}{% endif %}</td>
+<td style="{{ TD }}">{{ r.weak_lec or "—" }}</td><td style="{{ TD }}">{{ r.weak_pra or "—" }}</td><td style="{{ TD }}{{ R }}">{{ "{:,}".format(r.gap) }}</td></tr>{% endfor %}
+</table>
+{{ note(subject_note) }}
+</td></tr>
+
+<tr><td style="padding:18px 24px 6px;border-top:1px solid {{ RULE }};">
+{{ h2("3. Managers — 1:1s in the week of " ~ last_wk) }}
+<div style="font-size:13px;line-height:1.5;margin:6px 0 4px;"><b>{{ mt.connected }} of {{ mt.active }}</b> active instructors had a completed 1:1 ({{ na(mt.coverage, "%") }}).{% if s.managers_idle %} <b style="color:{{ RED }};">No 1:1s at all in 8 weeks: {{ s.managers_idle|join(", ") }}.</b>{% endif %}{% if mt.no_cap %} {{ mt.no_cap }} active instructors have none of these managers.{% endif %}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;">
+<tr><td style="{{ TH }}">Manager</td><td style="{{ TH }}">Subject</td><td style="{{ TH }}{{ R }}">Active instructors</td><td style="{{ TH }}{{ R }}">Connected</td><td style="{{ TH }}{{ R }}">Coverage</td><td style="{{ TH }}{{ R }}">Avg 1:1 QA</td><td style="{{ TH }}{{ R }}">Missed or to reschedule</td><td style="{{ TH }}{{ R }}">This week so far</td></tr>
+{% for m in s.managers %}<tr><td style="{{ TD }}">{{ m.name }}</td><td style="{{ TD }}">{{ m.cat|title if m.cat else "—" }}</td><td style="{{ TD }}{{ R }}">{{ m.active }}</td>
+<td style="{{ TD }}{{ R }}">{% if m.idle %}<span style="color:{{ RED }};font-weight:bold;">no 1:1s</span>{% else %}{{ m.connected }}{% endif %}</td>
+<td style="{{ TD }}{{ R }}{% if m.coverage is not none and m.coverage < 25 %}color:{{ RED }};font-weight:bold;{% endif %}">{{ na(m.coverage, "%") }}</td>
+<td style="{{ TD }}{{ R }}">{{ na(m.qa) }}</td><td style="{{ TD }}{{ R }}">{{ m.missed }}</td><td style="{{ TD }}{{ R }}">{{ m.this_week }} <span style="color:{{ MUTED }};">of {{ m.booked }} booked</span></td></tr>{% endfor %}
+</table>
+{{ note("Lowest coverage first. Connected = different instructors with a completed 1:1 that week; coverage = connected ÷ active instructors. 1:1 QA = average QA score of completed 1:1s. An instructor with two managers counts for both.") }}
+</td></tr>
+
+<tr><td style="padding:18px 24px 8px;">
+<a href="{{ link }}" style="display:inline-block;background:{{ BLUE }};color:#ffffff;text-decoration:none;padding:9px 16px;border-radius:6px;font-size:13px;font-weight:bold;">Open the drill-down</a>
+</td></tr>
+<tr><td style="padding:10px 24px 22px;">
+<div style="font-size:11px;color:#8A919E;line-height:1.5;">From the BigQuery drill-down export of {{ run_day }}. Averages are rebuilt from sums and counts. Recorded = classes with a recording among those with recording information. Attendance = present ÷ submitted records. The drill-down page has each university’s sections, day-by-day classes, issues, feedback and semester progress.</div>
+</td></tr>
+</table>
+</body></html>

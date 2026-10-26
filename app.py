@@ -477,6 +477,8 @@ def _save_upload(ups: list[tuple[str, bytes]]) -> dict:
     files = collect(ups)
     try:
         raw = instructor_file(files)
+        if not exp:
+            exp = _file_export_date(raw if raw is not None else ups[0][1])
         if raw is not None:
             name = next((n for n, _ in ups if n.lower().endswith(".zip")), ups[0][0])
             out["instructor"] = STORE.save_file(INSTRUCTOR_KEY, f"{name} › {INSTRUCTOR_FILE}", raw, exp)
@@ -485,6 +487,21 @@ def _save_upload(ups: list[tuple[str, bytes]]) -> dict:
     except dbstore.StoreError as e:
         out["errors"].append(f"The file wasn’t saved: {e}")
     return out
+
+
+def _file_export_date(data: bytes) -> str | None:
+    """The export_date_ist column of the instructor export (dd-mm-yyyy), as YYYY-MM-DD."""
+    try:
+        head = data[:200_000].decode("utf-8-sig", "ignore").splitlines()
+        cols = [c.strip().lower() for c in head[0].split(",")]
+        i = cols.index("export_date_ist")
+        v = head[1].split(",")[i].strip().strip('"')
+    except (ValueError, IndexError):
+        return None
+    m = re.fullmatch(r"(\d{2})-(\d{2})-(\d{4})", v) or None
+    if m:
+        return f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+    return v if re.fullmatch(r"\d{4}-\d{2}-\d{2}", v) else None
 
 
 @app.get("/api/manager/saved")

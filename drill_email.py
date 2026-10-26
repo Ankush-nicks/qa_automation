@@ -70,7 +70,10 @@ def render_text(S: dict, link: str) -> str:
          f"{_n(f['recorded'])}% · avg QA {_n(f['qa'])} (n={f['qa_n']:,}) · attendance {_n(f['attendance'])}% · planned for "
          f"{day(S['next_date'])}: {f['planned']}/{f['sections']} sections.", "",
          "1. UNIVERSITIES — NEEDS ATTENTION"]
-    if c["no_today"]:
+    if S.get("early"):
+        L.append(f"No classes are recorded for {c['run_day']} yet: the export was run before the day's classes, so "
+                 "today's and tomorrow's checks aren't meaningful. Run the export after classes for them.")
+    elif c["no_today"]:
         L.append(f"No session today ({c['run_day']}): {len(c['no_today'])}")
         L += [f"  - {r['name']}: last session {r['last_day']}, {r['plan']} of {r['act']} sections planned for "
               f"{day(S['next_date'])}" for r in c["no_today"]]
@@ -78,9 +81,9 @@ def render_text(S: dict, link: str) -> str:
         L.append("Every university with classes in the last 14 days has a session today.")
     if c["known"]:
         L.append(f"  Not listed, reason known: {c['known']}")
-    if S["nothing_planned"]:
+    if S["nothing_planned"] and not S.get("early"):
         L.append(f"Nothing planned for {c['next_day']}: {', '.join(S['nothing_planned'])}")
-    if S["some_planned"]:
+    if S["some_planned"] and not S.get("early"):
         L.append(f"Only some sections planned for {c['next_day']}: " +
                  ", ".join(f"{r['name']} {r['plan']} of {r['act']}" for r in S["some_planned"]))
     if S["not_done"]:

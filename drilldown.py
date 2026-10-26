@@ -114,7 +114,10 @@ def build(data: bytes) -> dict:
     days = F["02_section_day"]
     if not days:
         raise DrillError("02_section_day.csv is empty, so there is no run date.")
-    run = max(r["day"] for r in days)
+    # the export's run date: the query reads run_date - 13 days to run_date, so it is the first day of the
+    # window + 13 (an export made before the day's first class has no class rows for run_date itself)
+    first = min(r["day"] for f in ("02_section_day", "09_students_daily", "10_feedback_daily") for r in F[f] if r.get("day"))
+    run = max(max(r["day"] for r in days), (date.fromisoformat(first) + timedelta(days=13)).isoformat())
     unis, order = {}, []
     for r in F["01_universities"]:
         u = {"id": r["institute_id"], "name": r["institute_name"], "type": r["institute_type"], "location": r["location"],
@@ -209,7 +212,7 @@ def build(data: bytes) -> dict:
     caps = list(dict.fromkeys(r["manager"] for r in mw if r.get("manager")))
     return {
         "cols": COLS,
-        "meta": {"run_date": run, "from": min(r["day"] for r in days), "source": "BigQuery drill-down export",
+        "meta": {"run_date": run, "from": (date.fromisoformat(run) - timedelta(days=13)).isoformat(), "source": "BigQuery drill-down export",
                  "files": [{k: ("" if v is None else str(v)) for k, v in r.items()} for r in F.get("export_status", [])]},
         "universities": order, "instructors": inst, "managers_weekly": mw, "tickets_no_uni": no_uni,
         "qa_weeks": sorted({r["week"] for r in F["07_qa_weekly"] if r.get("week")}), "caps": caps,
@@ -418,6 +421,8 @@ def summary(D: dict, reasons: dict | None = None) -> dict:
                  "recorded": _pct(tot["recorded"], tot["with_recording_info"]),
                  "qa": _avg(tot["qa_sum"], tot["qa_n"]), "qa_n": tot["qa_n"],
                  "attendance": _pct(att["present"], att["submitted"]), "planned": plan_n},
+        # run before the day's first class: every university looks idle, so the email says that instead
+        "early": bool(unis) and not any(o["today"] for o in unis),
         "no_today": no_today, "nothing_planned": nothing,
         "some_planned": [{"name": o["name"], "plan": o["plan"], "act": o["act"]} for o in some],
         "not_done": lag, "not_done_total": sum(g["gap"] for g in lag),

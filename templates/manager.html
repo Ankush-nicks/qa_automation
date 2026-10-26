@@ -405,7 +405,9 @@ function orgView(){
   const none = live.filter(o => !o.a.plan.length), gapSecs = L.flatMap(o => o.a.gapSecs), gapAll = gapSecs.reduce((x, o) => x + o.c.gap, 0);
   const items = [], uniBtn = u => `<button type="button" class="chip ulink" data-uni="${U.indexOf(u)}">${esc(u.name)}</button>`;
   const noToday = live.filter(o => !o.u.sections.some(s => s.days.some(d => d.day === RUN && d.classes)));
-  if (noToday.length) {
+  if (live.length && noToday.length === live.length) {
+    items.push(['warn', `No classes are recorded for ${dLabel(RUN)} yet: this export was run before the day's classes, so today's and tomorrow's checks aren't meaningful. Run the export after classes for them.`]);
+  } else if (noToday.length) {
     const rows = noToday.map(o => ({ o, last: o.u.sections.flatMap(s => s.days.filter(d => d.classes).map(d => d.day)).sort().pop(), r: RS[o.u.name] }))
       .sort((x, y) => (!!x.r - !!y.r) || (x.last || '').localeCompare(y.last || ''));
     const unk = rows.filter(x => !x.r).length;

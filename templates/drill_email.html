@@ -33,7 +33,9 @@
 <tr><td style="padding:18px 24px 6px;border-top:1px solid {{ RULE }};">
 {{ h2("1. Universities — needs attention") }}
 
-{{ h3(no_today|length ~ " universit" ~ ("y has" if no_today|length == 1 else "ies have") ~ " no session today (" ~ run_day ~ ")" if no_today else "Every university with classes in the last 14 days has a session today", AMBER if no_today else GREEN) }}
+{% if s.early %}{{ h3("No classes are recorded for " ~ run_day ~ " yet", AMBER) }}
+<div style="font-size:13px;line-height:1.5;">This export was run before the day’s classes, so “no session today” and the plans for {{ next_day }} aren’t meaningful yet. Run the export after classes for them.</div>
+{% else %}{{ h3(no_today|length ~ " universit" ~ ("y has" if no_today|length == 1 else "ies have") ~ " no session today (" ~ run_day ~ ")" if no_today else "Every university with classes in the last 14 days has a session today", AMBER if no_today else GREEN) }}
 {% if no_today %}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;">
 <tr><td style="{{ TH }}">University</td><td style="{{ TH }}">Last session</td><td style="{{ TH }}{{ R }}">Sections planned for {{ next_day }}</td></tr>
 {% for r in no_today %}<tr><td style="{{ TD }}">{{ r.name }}</td><td style="{{ TD }}">{{ r.last_day }}</td><td style="{{ TD }}{{ R }}">{{ r.plan }} of {{ r.act }}</td></tr>{% endfor %}
@@ -43,7 +45,8 @@
 {% if s.nothing_planned %}{{ h3(s.nothing_planned|length ~ " universit" ~ ("y has" if s.nothing_planned|length == 1 else "ies have") ~ " nothing planned for " ~ next_day, RED) }}
 <div style="font-size:13px;line-height:1.5;">{{ s.nothing_planned|join(", ") }}</div>{% endif %}
 
-{% if s.some_planned %}{{ h3(s.some_planned|length ~ " universit" ~ ("y has" if s.some_planned|length == 1 else "ies have") ~ " only some sections planned for " ~ next_day, AMBER) }}
+{% endif %}
+{% if s.some_planned and not s.early %}{{ h3(s.some_planned|length ~ " universit" ~ ("y has" if s.some_planned|length == 1 else "ies have") ~ " only some sections planned for " ~ next_day, AMBER) }}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;">
 <tr><td style="{{ TH }}">University</td><td style="{{ TH }}{{ R }}">Sections planned</td></tr>
 {% for r in s.some_planned[:12] %}<tr><td style="{{ TD }}">{{ r.name }}</td><td style="{{ TD }}{{ R }}">{{ r.plan }} of {{ r.act }}</td></tr>{% endfor %}

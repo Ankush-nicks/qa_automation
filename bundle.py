@@ -39,14 +39,34 @@ class BundleError(ValueError):
 def _members(data: bytes, filename: str) -> dict[str, bytes]:
     """{lower-case base name: bytes} from a zip, or the single CSV itself."""
     if zipfile.is_zipfile(io.BytesIO(data)):
-        out = {}
+        out, rank = {}, {}
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             for info in z.infolist():
                 base = info.filename.replace("\\", "/").rsplit("/", 1)[-1].lower()
                 if base.endswith(".csv") and not base.startswith("._"):
-                    out[base] = z.read(info)
+                    body = z.read(info)
+                    # the same file twice (e.g. an old copy in a subfolder): keep the newest export
+                    r = (_csv_export_date(body), info.date_time)
+                    if base not in out or r > rank[base]:
+                        out[base], rank[base] = body, r
         return out
     return {(filename or "").replace("\\", "/").rsplit("/", 1)[-1].lower(): data}
+
+
+def _csv_export_date(data: bytes) -> str:
+    """YYYY-MM-DD from an export_date_ist column (dd-mm-yyyy or yyyy-mm-dd) on the first row, else ""."""
+    lines = data[:100_000].decode("utf-8-sig", "ignore").splitlines()
+    if len(lines) < 2:
+        return ""
+    cols = [c.strip().strip('"').lower() for c in lines[0].split(",")]
+    if "export_date_ist" not in cols:
+        return ""
+    try:
+        v = lines[1].split(",")[cols.index("export_date_ist")].strip().strip('"')
+    except IndexError:
+        return ""
+    m = re.fullmatch(r"(\d{2})-(\d{2})-(\d{4})", v)
+    return f"{m.group(3)}-{m.group(2)}-{m.group(1)}" if m else v if re.fullmatch(r"\d{4}-\d{2}-\d{2}", v) else ""
 
 
 def collect(uploads: list[tuple[str, bytes]]) -> dict[str, bytes]:

@@ -84,8 +84,7 @@ input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events
 .pulse::before,.pulse::after{content:"";position:absolute;inset:0;border-radius:50%;background:var(--qc);opacity:.45;animation:pulse 1.8s cubic-bezier(.2,.6,.3,1) infinite;transition:background .6s}
 .pulse::after{animation-delay:.9s}
 @keyframes pulse{from{transform:scale(1);opacity:.45}to{transform:scale(4.2);opacity:0}}
-.qgroup{font-size:13px;font-weight:600;color:var(--qc);margin-top:22px;transition:color .6s}
-.qbox{height:6.8em;max-width:640px;width:100%;display:flex;align-items:flex-start;justify-content:center}
+.qbox{margin-top:22px;height:6.8em;max-width:640px;width:100%;display:flex;align-items:flex-start;justify-content:center}
 @media (max-width:700px){.q{font-size:17px}.qbox{height:8.4em}}
 .q{font-size:20px;line-height:1.35;font-weight:500;color:var(--ink);text-align:center;text-wrap:balance;margin:0;
    transition:transform .5s cubic-bezier(.2,.7,.3,1),opacity .5s}
@@ -261,7 +260,6 @@ footer summary{cursor:pointer}
     </div>
     <div class="loading g-uni" id="dropBusy" role="status">
       <span class="pulse" aria-hidden="true"></span>
-      <div class="qgroup" id="qGroup">Universities</div>
       <div class="qbox"><p class="q" id="qText">Which universities and sections are teaching, and how many classes ran in the last 14 days?</p></div>
       <span class="dim" id="busyText">Opening the drill-down…</span>
     </div>
@@ -838,7 +836,6 @@ function nextQuestion() {
     qAt = (qAt + 1) % QLIST.length;                  // after the last question, start again
     const x = QLIST[qAt];
     box.classList.remove('g-uni', 'g-subj', 'g-mgr'); box.classList.add('g-' + x.k);
-    $('#qGroup').textContent = x.label;
     el.textContent = x.q;
     el.classList.remove('out'); el.classList.add('below');
     void el.offsetWidth;                             // start the roll-up from below

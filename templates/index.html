@@ -18,6 +18,7 @@
   --paper:var(--desk); --surface:var(--sheet); --line:var(--rule); --accent:var(--blue-ink); --accent-ink:#FFFFFF; --accent-tint:var(--blue-tint);
   --low:var(--red); --low-bg:var(--red-tint); --mid:var(--amber); --mid-bg:var(--amber-tint); --ok:var(--green); --ok-bg:var(--green-tint);
   --none-bg:#E8ECF3; --letter:#FFFFFF;
+  --q-uni:#3E6DB5; --q-subj:#2E8A66; --q-mgr:#8A56B5;
   color-scheme: light; box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
@@ -27,6 +28,7 @@
     --blue:#8EA3CF; --blue-ink:#AEBEE0; --rule:#2C323D; --rule-soft:#242931; --blue-tint:#212734;
     --red:#E3958B; --red-tint:#33252A; --amber:#D9B26E; --amber-tint:#2F2A1E; --green:#86C4A2; --green-tint:#1C2B25;
     --accent-ink:#12161D; --none-bg:#262C38; --letter:#1F2530;
+    --q-uni:#7FA3E6; --q-subj:#6CC9A3; --q-mgr:#C39BE6;
     color-scheme: dark;
   }
 }
@@ -35,6 +37,7 @@
     --blue:#8EA3CF; --blue-ink:#AEBEE0; --rule:#2C323D; --rule-soft:#242931; --blue-tint:#212734;
     --red:#E3958B; --red-tint:#33252A; --amber:#D9B26E; --amber-tint:#2F2A1E; --green:#86C4A2; --green-tint:#1C2B25;
   --accent-ink:#12161D; --none-bg:#262C38; --letter:#1F2530;
+  --q-uni:#7FA3E6; --q-subj:#6CC9A3; --q-mgr:#C39BE6;
   color-scheme: dark;
 }
 *,*::before,*::after{box-sizing:inherit}
@@ -76,10 +79,22 @@ input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events
 .drop .fine{font-size:13px;margin-top:18px;margin-bottom:0}
 .drop.busy>:not(.loading){display:none}
 .err{margin-top:16px;padding:10px 14px;border-left:3px solid var(--red);background:var(--red-tint);color:var(--red);display:none;text-align:left}
-.loading{display:flex;flex-direction:column;align-items:center;gap:12px;padding:8px 0}
-.loading .spin{width:28px;height:28px}
-.loading .lt{font-size:17px;font-weight:700;margin:0}
-.loading .ls{color:var(--muted);font-size:14px;margin:0;max-width:56ch}
+.drop.busy{border:0;background:none;padding:72px 16px 88px}
+/* loading: a coloured pulse and the questions this page answers, rolling up one by one */
+.loading{display:flex;flex-direction:column;align-items:center;gap:18px;--qc:var(--q-uni)}
+.loading.g-uni{--qc:var(--q-uni)} .loading.g-subj{--qc:var(--q-subj)} .loading.g-mgr{--qc:var(--q-mgr)}
+.pulse{position:relative;width:16px;height:16px;border-radius:50%;background:var(--qc);transition:background .6s}
+.pulse::before,.pulse::after{content:"";position:absolute;inset:0;border-radius:50%;background:var(--qc);opacity:.45;animation:pulse 1.8s cubic-bezier(.2,.6,.3,1) infinite;transition:background .6s}
+.pulse::after{animation-delay:.9s}
+@keyframes pulse{from{transform:scale(1);opacity:.45}to{transform:scale(4.2);opacity:0}}
+.qbox{margin-top:22px;height:4.4em;max-width:640px;width:100%;display:flex;align-items:flex-start;justify-content:center}
+.q{font-size:20px;line-height:1.35;font-weight:500;color:var(--ink);text-align:center;text-wrap:balance;margin:0;
+   transition:transform .5s cubic-bezier(.2,.7,.3,1),opacity .5s}
+.q.out{transform:translateY(-22px);opacity:0}
+.q.below{transform:translateY(22px);opacity:0;transition:none}
+.loading .ls{color:var(--muted);font-size:13.5px;margin:0;max-width:56ch;text-align:center}
+@media (max-width:700px){.q{font-size:17px}.qbox{height:6.4em}}
+@media (prefers-reduced-motion:reduce){.pulse::before,.pulse::after{animation:none}.q,.q.out,.q.below{transition:opacity .3s;transform:none}}
 .spin{width:16px;height:16px;border-radius:50%;border:2px solid var(--rule);border-top-color:var(--ink);animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
 .topbar{position:fixed;top:0;left:0;right:0;height:3px;overflow:hidden;z-index:30;background:var(--blue-tint)}
@@ -232,9 +247,9 @@ td.num{white-space:nowrap}
     <input type="file" id="fileInput" accept=".csv,.xlsx,.xlsm,.zip,text/csv,application/zip">
     <p class="fine" id="storeNote">The file is processed on this server and isn’t stored. Only the selected instructor’s scores are sent to the AI when you write an email.</p>
     <div class="err" id="err" role="alert"></div>
-    <div class="loading" id="loading" role="status" aria-live="polite">
-      <span class="spin" aria-hidden="true"></span>
-      <p class="lt" id="loadTitle">Loading…</p>
+    <div class="loading g-uni" id="loading" role="status">
+      <span class="pulse" aria-hidden="true"></span>
+      <div class="qbox"><p class="q" id="qText">Which instructors scored below the threshold on each of their last 3 QA days?</p></div>
       <p class="ls" id="loadSub"></p>
     </div>
   </section>
@@ -313,6 +328,31 @@ function showErr(msg){ const e=$("err"); e.textContent=msg; e.style.display="blo
 function showInfo(msg){ const e=$("err"); e.textContent=msg; e.style.display="block"; e.style.background="var(--ok-bg)"; e.style.color="var(--ok)"; }
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2200); }
 
+// The questions this page answers, one by one on a loop while it loads; the pulse colour moves with them
+const QLIST=[
+  "Which instructors scored below the threshold on each of their last 3 QA days?",
+  "Which instructors are close to the line?",
+  "Which sessions need an escalation check?",
+  "Which rubrics pulled each flagged instructor’s score down?",
+  "What did each instructor score, day by day, on their last 3 QA days?",
+  "How do Tech, Aptitude, Math and English compare on flagged instructors?",
+  "Who is each instructor’s capability manager, to copy on the email?",
+  "What should each flagged instructor’s email say, drawn from their scores and the rubrics?",
+  "Which emails have already been sent, and when?"];
+const QCOL=["g-uni","g-subj","g-mgr"];
+let qAt=0;
+function nextQuestion(){
+  const box=$("loading"); if(box.classList.contains("hidden")) return;
+  const el=$("qText"); el.classList.add("out");
+  setTimeout(()=>{
+    qAt=(qAt+1)%QLIST.length;
+    box.classList.remove(...QCOL); box.classList.add(QCOL[qAt%3]);
+    el.textContent=QLIST[qAt]; el.classList.remove("out"); el.classList.add("below");
+    void el.offsetWidth; el.classList.remove("below");
+  },500);
+}
+setInterval(nextQuestion,3000);
+
 let loadTimer=null;
 function setLoading(on,name){
   clearInterval(loadTimer);
@@ -321,11 +361,9 @@ function setLoading(on,name){
   [$("fileInput"),$("fileInput2")].forEach(i=>i.disabled=on);
   if(!on) return;
   const t0=Date.now();
-  $("loadTitle").textContent=`Loading ${name}… please wait`;
   const tick=()=>{
     const s=Math.round((Date.now()-t0)/1000);
-    $("loadSub").textContent = s<4 ? (name==="the saved data" ? "Reading the saved export and checking scores for each instructor." : "Uploading the file and checking scores for each instructor.")
-      : s<12 ? `Finding flagged instructors and building drafts… ${s}s`
+    $("loadSub").textContent = s<12 ? (name==="the saved data" ? "Opening the saved export…" : `Reading ${name}…`)
       : `Still working… ${s}s. If the app was idle, the server may be waking up; this can take up to a minute.`;
   };
   tick(); loadTimer=setInterval(tick,1000);

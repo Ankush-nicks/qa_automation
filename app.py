@@ -575,10 +575,17 @@ def api_drill_upload():
     if not f or not f.filename:
         return jsonify(error="Choose niat_drilldown_export.zip first."), 400
     data = f.read()
+    # a zip that also carries page 1's instructor file saves it for page 1 too
+    also = _save_upload([(f.filename, data)]) if STORE and zipfile.is_zipfile(io.BytesIO(data)) else None
+    page1 = also and also.get("instructor")
     try:
         if not drilldown.is_drill_zip(data):
-            raise drilldown.DrillError("This isn’t the drill-down export: the zip needs the 13 files "
-                                       "01_universities.csv … 13_tickets_month.csv.")
+            msg = ("This zip has no drill-down data: the 13 files 01_universities.csv … 13_tickets_month.csv "
+                   "aren’t in it.")
+            if page1:
+                msg += (f" Its instructor file (export of {page1['export_date'] or 'unknown date'}) was saved for "
+                        "Instructor emails.")
+            raise drilldown.DrillError(msg)
         D = drilldown.build(data)
         run = D["meta"]["run_date"]
         if not STORE:
@@ -589,7 +596,10 @@ def api_drill_upload():
         STORE.delete_files([x["key"] for x in saved[dbstore.keep_days():]])
         _answers.clear()
         D2, info = _drill_data(run)
-        return _gz_json(_drill_answer(D2, info, STORE.reasons()))
+        body = _drill_answer(D2, info, STORE.reasons())
+        if page1:
+            body = body[:-1] + ',"page1_saved":' + json.dumps(page1) + "}"
+        return _gz_json(body)
     except drilldown.DrillError as e:
         return jsonify(error=str(e)), 400
     except dbstore.StoreError as e:

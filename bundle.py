@@ -110,7 +110,20 @@ def raw_frames(uploads: list[tuple[str, bytes]]) -> tuple[dict, dict[str, bytes]
 
 
 def upload_export_date(uploads: list[tuple[str, bytes]]) -> str | None:
-    return next((export_date(n) for n, _ in uploads if export_date(n)), None)
+    """The export date from the uploaded file names, or else from the folder names inside a zip
+    (e.g. combined_qa_exports_package/qa_exports_20261024/...)."""
+    got = next((export_date(n) for n, _ in uploads if export_date(n)), None)
+    if got:
+        return got
+    for _, data in uploads:
+        try:
+            names = zipfile.ZipFile(io.BytesIO(data)).namelist()
+        except zipfile.BadZipFile:
+            continue
+        found = sorted({d for d in (export_date(n) for n in names) if d}, reverse=True)
+        if found:
+            return found[0]
+    return None
 
 
 def read_bundle(uploads: list[tuple[str, bytes]]) -> dict:

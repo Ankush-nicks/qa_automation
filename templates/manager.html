@@ -724,7 +724,7 @@ async function upload(file) {
     if (j.db) saved = await fetch('/api/manager/saved').then(x => x.json()).catch(() => saved);
     Object.assign(state, { u: null, s: null, m: null });
     setup(j); shown(); render();
-    toast(j.db ? `Saved ${file.name}: the export of ${dLabel(j.data.meta.run_date)}.` : `Read ${file.name}. Not saved: the database isn’t set up.`, 5000);
+    toast(j.db ? `Saved ${file.name}: the export of ${dLabel(j.data.meta.run_date)}.${j.page1_saved ? ' Its instructor file was saved for Instructor emails too.' : ''}` : `Read ${file.name}. Not saved: the database isn’t set up.`, 5000);
   } catch (e) {
     if (first) { $('#dropIdle').classList.remove('hidden'); showErr('#err', e.message); } else showErr('#err2', e.message);
   } finally { $('#dropBusy').classList.add('hidden'); $('#busy').classList.add('hidden'); }

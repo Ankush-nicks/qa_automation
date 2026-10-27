@@ -8,10 +8,12 @@
   const HEAVY = 360; // minutes in a day above which the workload is too much (6 h)
 
   const css = `
-.ps{position:relative;max-width:440px;margin:-6px 0 18px}
+.ps-row{display:flex;justify-content:space-between;align-items:center;gap:12px 24px;flex-wrap:wrap;margin-bottom:18px}
+.ps-row .pagenav{margin-bottom:0}
+.ps{position:relative;width:380px;max-width:100%}
 .ps input{width:100%;font:inherit;font-size:15px;padding:9px 12px 9px 34px;border:1px solid var(--rule);border-radius:6px;background:var(--sheet) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%236B7280' stroke-width='2' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 11px center;color:var(--ink)}
 .ps input:focus{outline:2px solid var(--blue);outline-offset:1px;border-color:transparent}
-.ps-list{position:absolute;left:0;top:calc(100% + 4px);width:max(100%,min(520px,calc(100vw - 32px)));background:var(--sheet);border:1px solid var(--rule);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:30;padding:4px;max-height:60vh;overflow:auto}
+.ps-list{position:absolute;right:0;top:calc(100% + 4px);width:max(100%,min(520px,calc(100vw - 32px)));background:var(--sheet);border:1px solid var(--rule);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:30;padding:4px;max-height:60vh;overflow:auto}
 .ps-list[hidden]{display:none}
 .ps-opt{display:block;width:100%;text-align:left;font:inherit;background:none;border:0;border-radius:5px;padding:8px 10px;cursor:pointer;color:var(--ink)}
 .ps-opt b{font-weight:600}
@@ -52,7 +54,7 @@
 .ps-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 18px;margin-top:6px;font-size:14px}
 .ps-facts div small{display:block;color:var(--muted);font-size:12.5px}
 .ps-facts div b{font-size:17px}
-@media (max-width:700px){.ps{max-width:none}.ps-panel{padding:14px}}`;
+@media (max-width:700px){.ps{width:100%}.ps-list{left:0;right:auto}.ps-panel{padding:14px}}`;
   document.head.insertAdjacentHTML('beforeend', `<style>${css}</style>`);
 
   const box = document.createElement('div');
@@ -61,12 +63,15 @@
     role="combobox" aria-expanded="false" aria-controls="psList" aria-autocomplete="list" aria-label="Search an instructor or manager by name">
     <div class="ps-list" id="psList" role="listbox" hidden></div>`;
   // the tabs, the search and its results sit above the page's own header, full width, on both pages
+  // tabs on the left and the search on the right, in one row above the page's own header; results below it
   const hdr = nav.closest('header');
-  if (hdr) hdr.before(nav);
-  nav.insertAdjacentElement('afterend', box);
+  const row = document.createElement('div');
+  row.className = 'ps-row';
+  (hdr || nav).before(row);
+  row.append(nav, box);
   const panel = document.createElement('section');
   panel.className = 'ps-panel'; panel.hidden = true; panel.setAttribute('aria-live', 'polite');
-  box.insertAdjacentElement('afterend', panel);
+  row.insertAdjacentElement('afterend', panel);
   const input = box.querySelector('input'), list = box.querySelector('.ps-list');
 
   /* ---------- helpers ---------- */

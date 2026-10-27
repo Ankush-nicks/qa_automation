@@ -182,6 +182,12 @@ def api_analyze():
     out["db"] = bool(STORE)
     if STORE and uploaded:
         out["saved"] = _save_upload([(filename, data)])
+        if drilldown.is_drill_zip(data):
+            try:
+                out["saved"]["drill"] = _save_drill(filename, data)
+            except Exception as e:  # noqa: BLE001
+                app.logger.exception("drill-down part of a page-1 upload failed")
+                out["saved"]["errors"].append(f"The University drill-down part wasn’t saved ({e}).")
     elif STORE:
         out["saved_file"] = STORE.file_info(INSTRUCTOR_KEY)
     return jsonify(out)
@@ -585,6 +591,18 @@ def api_drill():
         return jsonify(error=f"The drill-down couldn’t be built ({e})."), 500
 
 
+def _save_drill(filename: str, data: bytes, D: dict | None = None) -> str:
+    """Saves the drill-down part of an upload under its run date (replacing that date's earlier upload) and
+    keeps only the newest keep_days dates. Returns the run date."""
+    D = D or drilldown.build(data)
+    run = D["meta"]["run_date"]
+    STORE.save_file(DRILL_PREFIX + run, filename, drilldown.pack(data), run)
+    saved = STORE.list_files(DRILL_PREFIX)
+    STORE.delete_files([x["key"] for x in saved[dbstore.keep_days():]])
+    _answers.clear()
+    return run
+
+
 @app.post("/api/drill/upload")
 def api_drill_upload():
     """Saves niat_drilldown_export.zip under its run date (the latest class day in it) and returns
@@ -610,10 +628,7 @@ def api_drill_upload():
         if not STORE:
             _unsaved.update(data=D, info={"filename": f.filename, "saved_at": None, "export_date": run})
             return _gz_json(_drill_answer(D, _unsaved["info"], {}))
-        STORE.save_file(DRILL_PREFIX + run, f.filename, drilldown.pack(data), run)
-        saved = STORE.list_files(DRILL_PREFIX)
-        STORE.delete_files([x["key"] for x in saved[dbstore.keep_days():]])
-        _answers.clear()
+        _save_drill(f.filename, data, D)
         D2, info = _drill_data(run)
         body = _drill_answer(D2, info, STORE.reasons())
         if page1:

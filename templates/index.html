@@ -426,7 +426,8 @@ async function analyze(first){
     state.useSaved=true; state.file=null; state.prevFile=null;
     if(sending&&j.saved){
       const errs=(j.saved.errors||[]);
-      toast(errs.length?errs.join(" "):"Saved: this page opens on this file until you upload a newer one.");
+      toast(errs.length?errs.join(" "):"Saved: this page opens on this file until you upload a newer one."
+        +(j.saved.drill?` The University drill-down was updated too (export of ${new Date(j.saved.drill+"T00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short"})}).`:""));
     }
   }
   if(first) loadSentLog();

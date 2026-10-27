@@ -561,13 +561,41 @@ def _drill_answer(D: dict, info: dict, reasons: dict) -> str:
     applied = drilldown.apply_reasons(D, reasons)
     S = drilldown.summary(D, applied)
     link = (os.getenv("APP_URL", "").strip().rstrip("/") or request.host_url.rstrip("/")) + "/manager"
-    out = {"data": D, "reasons": applied, "reason_options": REASONS if STORE else [],
+    out = {"data": {k: v for k, v in D.items() if k != "sessions"}, "reasons": applied, "reason_options": REASONS if STORE else [],
            "file": {"name": info.get("filename"), "saved_at": info.get("saved_at"), "date": D["meta"]["run_date"]},
            "db": bool(STORE),
            "email": {"subject": drill_email.subject(S), "preview": drill_email.render_html(S, link, preview=True),
                      "html": drill_email.render_html(S, link, preview=False),
                      "text": drill_email.render_text(S, link), **_daily_recipients()}}
     return json.dumps(_clean(out), ensure_ascii=False, separators=(",", ":"))
+
+
+@app.get("/api/people")
+def api_people():
+    """The name search (both pages): instructors, capability managers, 1:1 weeks and each instructor's
+    sessions from a saved drill-down export (?date=YYYY-MM-DD, default the newest)."""
+    try:
+        D, info = _drill_data(request.args.get("date") or None)
+    except drilldown.DrillError as e:
+        return jsonify(error=str(e)), 404
+    except dbstore.StoreError as e:
+        return jsonify(error=f"The database step failed: {e}"), 502
+    key = ("people", info.get("export_date"), info.get("saved_at"))
+    if key not in _answers:
+        if len(_answers) >= 6:
+            _answers.clear()
+        run = D["meta"]["run_date"]
+        out = {"run_date": run, "from": D["meta"]["from"], "file": info.get("filename"),
+               "instructors": [{k: i.get(k) for k in (
+                   "instructor_user_id", "instructor_name", "category", "home_institute", "status", "managers",
+                   "instructor_mail", "taught_at", "sessions_14d", "lp_sessions_14d", "minutes_14d", "zero_qa_14d",
+                   "qa_last3_avg", "qa_last3_n", "qa_last3_days", "low_qa", "checkin_days", "checked_in_days",
+                   "late_days", "connects_done_this_week", "connect_statuses_this_week", "last_completed_connect")}
+                   for i in D["instructors"]],
+               "caps": D["caps"], "managers_weekly": D["managers_weekly"],
+               "sess_cols": drilldown.COLS["sess"], "sessions": D.get("sessions")}
+        _answers[key] = json.dumps(_clean(out), ensure_ascii=False, separators=(",", ":"))
+    return _gz_json(_answers[key])
 
 
 @app.get("/api/drill")

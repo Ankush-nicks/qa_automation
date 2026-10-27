@@ -864,5 +864,6 @@ fetch('/api/status').then(r => r.json()).then(j => {
   $('#sendStatus').innerHTML = `<span class="dot ${s.mode === 'live' ? 'on' : 'test'}"></span>Send: ${esc(s.provider_name)} · ${mode}`;
 }).catch(() => {});
 </script>
+<script src="/static/people.js"></script>
 </body>
 </html>

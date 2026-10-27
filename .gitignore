@@ -19,3 +19,6 @@ bigquery/4_manager_activity.filled.sql
 
 # drill-down reference built from real data
 NIAT University Drill-down.*
+
+# brainstorm mockups
+.superpowers/

@@ -14,6 +14,8 @@ Shape of the data (the page's script reads it as is):
   tickets_no_uni  file 13 rows without a university
   qa_weeks        the weeks (Mondays) in file 07
   caps            the capability managers in file 12
+  sessions        file 14 (one-file export v2 and later): {instructor id: [packed session rows]}, for the
+                  name search's workload; not sent with the page's main data
 """
 from __future__ import annotations
 
@@ -45,6 +47,8 @@ COLS = {
              "instructor_name", "recording_flow", "qa_rating", "no_recording", "recorded_not_evaluated",
              "pending_after_date", "partially_completed", "malpractice", "flagged", "report_not_opened", "zero_qa"],
     "qaw": ["week", "subject", "lp_sessions", "lp_no_recording", "lp_evaluated", "qa_sum", "qa_n", "zero_qa"],
+    "sess": ["day", "start_time", "end_time", "minutes", "session_title", "session_type", "session_status",
+             "institute_name", "sections", "qa_rating"],
     "tickets": ["assigned_team", "ticket_status", "category", "sub_category", "tickets", "sla_breach_statuses",
                 "oldest_open_created", "instructor_ids"],
 }
@@ -56,7 +60,8 @@ TEXT = {"institute_id", "institute_name", "institute_type", "location", "section
         "taught_at", "qa_last3_days", "connect_statuses_this_week", "last_completed_connect", "manager_id", "manager",
         "assigned_team", "ticket_status", "sub_category", "sla_breach_statuses", "oldest_open_created",
         "instructor_ids", "file_name", "error", "rows", "first_start", "instructor_mail", "run_date", "from_date",
-        "next_day", "qa_end", "exported_at_utc", "query_version"}
+        "next_day", "qa_end", "exported_at_utc", "query_version", "sections"}
+OPTIONAL = ["14_sessions"]
 
 
 class DrillError(ValueError):
@@ -111,7 +116,7 @@ def read_zip(data: bytes) -> dict[str, list[dict]]:
         raise DrillError("This zip isn’t the drill-down export: it has no " + ", ".join(f + ".csv" for f in missing[:4])
                          + (f" and {len(missing) - 4} more" if len(missing) > 4 else "") + ".")
     out = {}
-    for stem in FILES + ["export_status", "meta"]:
+    for stem in FILES + OPTIONAL + ["export_status", "meta"]:
         if stem not in names:
             continue
         txt = files[stem].decode("utf-8-sig")
@@ -127,7 +132,7 @@ def pack(data: bytes) -> bytes:
         return data
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        for stem in FILES + ["export_status", "meta"]:
+        for stem in FILES + OPTIONAL + ["export_status", "meta"]:
             if stem in files:
                 z.writestr(f"{stem}.csv", files[stem])
     return buf.getvalue()
@@ -262,12 +267,19 @@ def build(data: bytes) -> dict:
         i["low_qa"] = low_qa(i, run)
     mw = F["12_managers_weekly"]
     caps = list(dict.fromkeys(r["manager"] for r in mw if r.get("manager")))
+    sessions: dict[str, list] = {}
+    for r in F.get("14_sessions") or []:
+        if r.get("instructor_user_id"):
+            sessions.setdefault(r["instructor_user_id"], []).append(_pack("sess", r))
+    for L in sessions.values():
+        L.sort(key=lambda x: (x[0] or "", x[1] or ""))
     return {
         "cols": COLS,
         "meta": {"run_date": run, "from": (date.fromisoformat(run) - timedelta(days=13)).isoformat(), "source": "BigQuery drill-down export",
                  "files": [{k: ("" if v is None else str(v)) for k, v in r.items()} for r in F.get("export_status", [])]},
         "universities": order, "instructors": inst, "managers_weekly": mw, "tickets_no_uni": no_uni,
         "qa_weeks": sorted({r["week"] for r in F["07_qa_weekly"] if r.get("week")}), "caps": caps,
+        "sessions": sessions if "14_sessions" in F else None,
     }
 
 

@@ -5,7 +5,7 @@
 -- the app splits it into the files it already reads (01_universities ... 13_tickets_month and
 -- instructor_qa_last3_export) and updates both pages.
 --
--- The result is about 12-15 MB, above the console's 10 MB "download CSV" limit. Use
+-- The result is about 18-22 MB, above the console's 10 MB "download CSV" limit. Use
 -- "Save results > CSV (Google Drive)", or in Cloud Shell:
 --   bq query --nouse_legacy_sql --format=csv --max_rows=5000000 < niat_all_in_one.sql > niat_all_in_one.csv
 --
@@ -19,6 +19,8 @@
 --   * Below 5 = EACH of the last 3 QA days has a daily average below 5 (all 3 days needed).
 --   * Capability manager = the instructor's managers that are on the list of 14 capability managers below.
 --   * Weeks start on Monday. run_date = today (IST); the 14-day window is run_date - 13 .. run_date.
+--   * An instructor's workload counts each session once: a class merged across sections is one session
+--     (same session and start time), with its scheduled start-to-end minutes.
 -- Edit only the `params` and `cap_list` CTEs. Nothing is written to BigQuery.
 
 WITH
@@ -284,6 +286,25 @@ sess AS (
   SELECT s.*, qv.final_score AS qs
   FROM summary s LEFT JOIN qa_v qv ON qv.sid = s.sid
 ),
+-- each instructor's sessions in the 14-day window, merged sections counted once (workload)
+inst_sess AS (
+  SELECT iid, DATE(start_dt) AS day,
+    FORMAT_DATETIME('%H:%M', start_dt) AS start_time, FORMAT_DATETIME('%H:%M', MAX(end_dt)) AS end_time,
+    MAX(DATETIME_DIFF(end_dt, start_dt, MINUTE)) AS minutes,
+    ANY_VALUE(session_title) AS session_title, ANY_VALUE(session_type) AS session_type,
+    ANY_VALUE(session_status) AS session_status,
+    STRING_AGG(DISTINCT institute_name, ', ') AS institute_name,
+    STRING_AGG(DISTINCT section_name, ', ' ORDER BY section_name) AS sections,
+    MAX(qs) AS qa_rating
+  FROM (
+    SELECT LOWER(REPLACE(TRIM(s.instructor_user_id), '-', '')) AS iid, COALESCE(s.session_id, s.sid) AS skey,
+      s.session_start_datetime AS start_dt, s.session_end_datetime AS end_dt, s.session_title, s.session_type,
+      s.session_status, s.institute_name, s.section_name, s.qs
+    FROM sess s CROSS JOIN params p
+    WHERE DATE(s.session_start_datetime) BETWEEN p.from_date AND p.run_date AND s.instructor_user_id IS NOT NULL
+  )
+  GROUP BY iid, skey, start_dt
+),
 p01 AS (
   SELECT i.institute_id, i.institute_name, i.institute_type, i.institue_location AS location,
          sec.sections, sec.batches, stu.total_students
@@ -448,13 +469,12 @@ p10 AS (
 ),
 p11 AS (
   WITH load AS (
-    SELECT LOWER(REPLACE(TRIM(instructor_user_id), '-', '')) AS iid,
+    SELECT iid,
       COUNT(*) AS sessions_14d, COUNTIF(session_type IN ('LECTURE','PRACTICE')) AS lp_sessions_14d,
-      SUM(DATETIME_DIFF(session_end_datetime, session_start_datetime, MINUTE)) AS minutes_14d,
+      SUM(minutes) AS minutes_14d,
       STRING_AGG(DISTINCT institute_name, ', ') AS taught_at,
-      COUNTIF(qs = 0) AS zero_qa_14d
-    FROM sess CROSS JOIN params p
-    WHERE DATE(session_start_datetime) BETWEEN p.from_date AND p.run_date AND instructor_user_id IS NOT NULL
+      COUNTIF(qa_rating = 0) AS zero_qa_14d
+    FROM inst_sess
     GROUP BY iid
   ), chk AS (
     SELECT LOWER(REPLACE(TRIM(instructor_user_id), '-', '')) AS iid, COUNT(*) AS checkin_days,
@@ -533,10 +553,15 @@ p13 AS (
   WHERE DATE(ticket_creation_datetime) BETWEEN p.month_start AND p.run_date
   GROUP BY institute_name, assigned_team, ticket_status, category, sub_category
 ),
+p14 AS (
+  SELECT iid AS instructor_user_id, day, start_time, end_time, minutes, session_title, session_type, session_status,
+    institute_name, sections, qa_rating
+  FROM inst_sess
+),
 p00 AS (
   SELECT run_date, from_date, next_day, qa_end, threshold,
          FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%SZ', CURRENT_TIMESTAMP()) AS exported_at_utc,
-         'niat_all_in_one v1' AS query_version
+         'niat_all_in_one v2' AS query_version
   FROM params
 )
 
@@ -554,5 +579,6 @@ UNION ALL SELECT '10_feedback_daily',      TO_JSON_STRING(t) FROM p10 t
 UNION ALL SELECT '11_instructors',         TO_JSON_STRING(t) FROM p11 t
 UNION ALL SELECT '12_managers_weekly',     TO_JSON_STRING(t) FROM p12 t
 UNION ALL SELECT '13_tickets_month',       TO_JSON_STRING(t) FROM p13 t
+UNION ALL SELECT '14_sessions',            TO_JSON_STRING(t) FROM p14 t
 UNION ALL SELECT 'instructor_qa_last3_export', TO_JSON_STRING(t) FROM p_instructor_qa t
 ORDER BY part;

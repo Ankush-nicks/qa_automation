@@ -453,6 +453,8 @@ async function analyze(first){
     }
   }
   if(first) loadSentLog();
+  // a cleared review date falls back to the default one: show it rather than an empty field
+  if(!first&&!$("sReview").value&&j.settings&&j.settings.review) $("sReview").value=j.settings.review;
   if(first){
     $("sReview").value=j.settings.review;
     state.drafts={}; state.busy={}; state.failed={}; state.tab="flagged";

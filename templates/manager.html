@@ -252,10 +252,10 @@ footer summary{cursor:pointer}
 
   <section class="drop" id="drop">
     <div id="dropIdle" class="hidden">
-      <h2>Drop today’s niat_drilldown_export.zip here</h2>
-      <p>The zip with the 13 files <code>01_universities.csv</code> … <code>13_tickets_month.csv</code> from the BigQuery export.</p>
+      <h2>Drop today’s export here</h2>
+      <p>The one-file CSV from <code>niat_all_in_one.sql</code> (it updates both pages), or the zip with the 13 files <code>01_universities.csv</code> … <code>13_tickets_month.csv</code>.</p>
       <label class="btn" for="fileInput">Choose file</label>
-      <input type="file" id="fileInput" accept=".zip,application/zip">
+      <input type="file" id="fileInput" accept=".zip,.csv,application/zip,text/csv">
       <p class="fine" id="storeNote">Processed on this server in memory and not stored. Contains instructor names: internal use only.</p>
     </div>
     <div class="loading g-uni" id="dropBusy" role="status">
@@ -270,8 +270,8 @@ footer summary{cursor:pointer}
     <div class="controls">
       <div class="field"><label for="runDate">Export</label><select id="runDate"></select></div>
       <span class="sendstatus" id="sendStatus"></span>
-      <div class="filebar"><span id="fileName"></span><label class="btn ghost small" for="fileInput2">Upload new zip</label>
-        <input type="file" id="fileInput2" accept=".zip,application/zip"></div>
+      <div class="filebar"><span id="fileName"></span><label class="btn ghost small" for="fileInput2">Upload new export</label>
+        <input type="file" id="fileInput2" accept=".zip,.csv,application/zip,text/csv"></div>
     </div>
     <div class="busyline hidden" id="busy" role="status"><span class="spin" aria-hidden="true"></span>Updating…</div>
     <div class="err hidden" id="err2" role="alert"></div>
@@ -382,16 +382,16 @@ const go = patch => { Object.assign(state, patch); render(); window.scrollTo({ t
 /* ---------- instructor QA over each instructor's last 3 QA days (file 11) ---------- */
 const capLabel = i => { const c = capsOf(i); return c.length ? c.map(esc).join(', ') : 'no capability manager'; };
 const q3Days = i => (i.qa_last3_days || '').split(' | ').map(x => x.slice(0, 10)).filter(Boolean);
-const qDays = i => q3Days(i).map(d => d.slice(0, 4) === RUN.slice(0, 4) ? fmtD(d) : `${fmtD(d)} ${d.slice(0, 4)}`).join(', ');
+const qDays = i => (i.qa_last3_days || '').split(' | ').filter(Boolean).map(x => { const [d, a] = x.split(' '); return `${d.slice(0, 4) === RUN.slice(0, 4) ? fmtD(d) : `${fmtD(d)} ${d.slice(0, 4)}`} <b${+a < 5 ? ' style="color:var(--red)"' : ''}>${a}</b>`; }).join(' · ');
 const hasQ3 = i => i.qa_last3_avg !== null && i.qa_last3_avg !== undefined && i.qa_last3_n;
 function instQTable(L, withUni){
   return `<div class="scroll lag"><table><thead><tr><th class="num">#</th><th>Instructor</th><th class="num">QA</th><th class="num">n</th>${withUni ? '<th>Taught at, 14 days</th>' : ''}<th>Subject</th><th>Capability manager</th><th>Last 3 QA days</th></tr></thead><tbody>${L.map((i, k) => `<tr><td class="num">${k + 1}</td><td>${esc(i.instructor_name || 'Unnamed')}</td><td class="num">${i.qa_last3_avg}</td><td class="num">${i.qa_last3_n}</td>${withUni ? `<td>${i.taught_at ? esc(i.taught_at) : '<span class="null">no session</span>'}</td>` : ''}<td>${val(i.category)}</td><td>${capLabel(i)}</td><td style="white-space:nowrap">${qDays(i)}</td></tr>`).join('')}</tbody></table></div>`;
 }
-const Q3NOTE = `QA = the instructor's average over their own last 3 days with a QA score (recorded, evaluated lecture and practice sessions), across all universities they teach at. n = number of QA scores in those days.`;
+const Q3NOTE = `Below 5 = each of the instructor's last 3 days with a QA score has a daily average below 5, the same rule as the Instructor emails page. QA = the average over those 3 days, across all universities they teach at; n = number of QA scores in them.`;
 function qaItems(list, withUni){
   const out = [], all = list.filter(hasQ3);
-  const low = list.filter(i => i.status === 'ACTIVE' && hasQ3(i) && i.qa_last3_avg < 5).sort((a, b) => a.qa_last3_avg - b.qa_last3_avg || b.qa_last3_n - a.qa_last3_n);
-  if (low.length) out.push(['bad', `<b>${low.length}</b> active instructor${low.length === 1 ? ' is' : 's are'} below 5 QA`, instQTable(low, withUni) + `<p class="note">${Q3NOTE} Lowest first.</p>`]);
+  const low = list.filter(i => i.status === 'ACTIVE' && hasQ3(i) && i.low_qa).sort((a, b) => a.qa_last3_avg - b.qa_last3_avg || b.qa_last3_n - a.qa_last3_n);
+  if (low.length) out.push(['bad', `<b>${low.length}</b> active instructor${low.length === 1 ? ' is' : 's are'} below 5 on each of their last 3 QA days`, instQTable(low, withUni) + `<p class="note">${Q3NOTE} Lowest first.</p>`]);
   const top = all.filter(i => i.taught_at).sort((a, b) => b.qa_last3_avg - a.qa_last3_avg || b.qa_last3_n - a.qa_last3_n).slice(0, 2);
   if (top.length) out.push(['good', `Highest QA: ${top.map(i => `<b>${esc(i.instructor_name || 'Unnamed')}</b> ${i.qa_last3_avg}`).join(', ')}`, instQTable(top, withUni) + `<p class="note">${Q3NOTE} Only instructors who taught in the last 14 days.</p>`]);
   return out;
@@ -479,7 +479,7 @@ function uniView(u){
 }
 function instTable(L, u){
   if (!L.length) return '<p class="empty">No instructor taught here in the last 14 days.</p>';
-  return `<div class="scroll"><table><thead><tr><th>Instructor</th><th>Subject</th><th class="num">Sessions, 14 days</th><th class="num">QA, last 3 QA days</th><th class="num">Zero QA, 14 days</th><th class="num">Last completed 1:1</th></tr></thead><tbody>${L.slice().sort((x, y) => (y.sessions_14d || 0) - (x.sessions_14d || 0)).map(i => `<tr><td>${val(i.instructor_name)}</td><td>${val(i.category)}</td><td class="num">${N(i.sessions_14d ?? 0)}</td><td class="num">${i.qa_last3_avg ?? nul}</td><td class="num">${i.zero_qa_14d ? `<span class="pill bad">${i.zero_qa_14d}</span>` : '0'}</td><td class="num">${i.last_completed_connect ? `<span class="pill ${i.last_completed_connect >= LASTWK ? 'good' : 'warn'}">${fmtD(i.last_completed_connect)}</span>` : nul}</td></tr>`).join('')}</tbody></table></div>
+  return `<div class="scroll"><table><thead><tr><th>Instructor</th><th>Subject</th><th class="num">Sessions, 14 days</th><th>Last 3 QA days</th><th class="num">Zero QA, 14 days</th><th class="num">Last completed 1:1</th></tr></thead><tbody>${L.slice().sort((x, y) => (y.sessions_14d || 0) - (x.sessions_14d || 0)).map(i => `<tr><td>${val(i.instructor_name)}</td><td>${val(i.category)}</td><td class="num">${N(i.sessions_14d ?? 0)}</td><td style="white-space:nowrap">${hasQ3(i) ? qDays(i) + (i.low_qa ? ' <span class="pill bad">below 5</span>' : '') : nul}</td><td class="num">${i.zero_qa_14d ? `<span class="pill bad">${i.zero_qa_14d}</span>` : '0'}</td><td class="num">${i.last_completed_connect ? `<span class="pill ${i.last_completed_connect >= LASTWK ? 'good' : 'warn'}">${fmtD(i.last_completed_connect)}</span>` : nul}</td></tr>`).join('')}</tbody></table></div>
   <p class="note">Sessions anywhere in the last 14 days. QA = average of the instructor's last 3 days with a QA score. Green 1:1 = since ${fmtD(LASTWK)}.</p>`;
 }
 function dailySummary(u){
@@ -637,7 +637,7 @@ function mgrView(m){
   `<div class="head"><h2>${esc(m.name)}</h2><div class="sub">${val(m.cat)} · ${N(m.instructors)} instructors mapped, ${N(m.active)} active</div></div>
   <div class="kpis">${kpi('Active instructors', N(m.active))}${kpi('Connected', w ? N(w.instructors_connected) : '0', `week of ${fmtD(LASTWK)}`)}${kpi('Coverage', m.active ? pctS(w ? w.instructors_connected : 0, m.active) : null, 'connected ÷ active')}${kpi('Avg 1:1 QA', w ? avg(w.connect_qa_sum, w.connect_qa_n) : null, w ? `n=${N(w.connect_qa_n)}` : 'no 1:1s that week')}${kpi("Instructors' class QA", q.length ? Math.round(q.reduce((a, i) => a + i.qa_last3_avg, 0) / q.length * 100) / 100 : null, `average of ${q.length} instructors' last 3 QA days`)}</div>
   ${attnBox(items)}
-  ${fold('Instructors', `${L.length} active, lowest QA first`, L.length ? `<div class="scroll"><table><thead><tr><th>Instructor</th><th>Taught at, 14 days</th><th class="num">Sessions</th><th class="num">QA, last 3 QA days</th><th class="num">Zero QA</th><th class="num">Last completed 1:1</th></tr></thead><tbody>${L.map(i => `<tr><td>${val(i.instructor_name)}</td><td>${i.taught_at ? esc(i.taught_at) : '<span class="null">no session</span>'}</td><td class="num">${N(i.sessions_14d ?? 0)}</td><td class="num">${i.qa_last3_avg ?? nul}</td><td class="num">${i.zero_qa_14d ? `<span class="pill bad">${i.zero_qa_14d}</span>` : '0'}</td><td class="num">${i.last_completed_connect ? `<span class="pill ${i.last_completed_connect >= LASTWK ? 'good' : 'warn'}">${fmtD(i.last_completed_connect)}</span>` : nul}</td></tr>`).join('')}</tbody></table></div><p class="note">Sessions and zero QA cover the last 14 days. Green 1:1 = since ${fmtD(LASTWK)}.</p>` : '<p class="empty">No active instructors mapped.</p>', true)}
+  ${fold('Instructors', `${L.length} active, lowest QA first`, L.length ? `<div class="scroll"><table><thead><tr><th>Instructor</th><th>Taught at, 14 days</th><th class="num">Sessions</th><th>Last 3 QA days</th><th class="num">Zero QA</th><th class="num">Last completed 1:1</th></tr></thead><tbody>${L.map(i => `<tr><td>${val(i.instructor_name)}</td><td>${i.taught_at ? esc(i.taught_at) : '<span class="null">no session</span>'}</td><td class="num">${N(i.sessions_14d ?? 0)}</td><td style="white-space:nowrap">${hasQ3(i) ? qDays(i) + (i.low_qa ? ' <span class="pill bad">below 5</span>' : '') : nul}</td><td class="num">${i.zero_qa_14d ? `<span class="pill bad">${i.zero_qa_14d}</span>` : '0'}</td><td class="num">${i.last_completed_connect ? `<span class="pill ${i.last_completed_connect >= LASTWK ? 'good' : 'warn'}">${fmtD(i.last_completed_connect)}</span>` : nul}</td></tr>`).join('')}</tbody></table></div><p class="note">Sessions and zero QA cover the last 14 days. Green 1:1 = since ${fmtD(LASTWK)}.</p>` : '<p class="empty">No active instructors mapped.</p>', true)}
   ${fold('Weekly 1:1s', 'last 8 weeks', m.weeks.length ? `<div class="scroll"><table><thead><tr><th>Week of</th><th class="num">Booked</th><th class="num">Completed</th><th class="num">Missed</th><th class="num">Rescheduled</th><th class="num">Instructors connected</th><th class="num">Avg 1:1 QA</th></tr></thead><tbody>${m.weeks.slice().sort((a, b) => b.week.localeCompare(a.week)).map(x => `<tr><td>${fmtD(x.week)}${x.week === THISWK ? ' <span class="t-muted">so far</span>' : ''}</td><td class="num">${N(x.connects)}</td><td class="num">${N(x.completed)}</td><td class="num">${N(x.missed)}</td><td class="num">${N(x.rescheduled)}</td><td class="num">${N(x.instructors_connected)}</td><td class="num">${avg(x.connect_qa_sum, x.connect_qa_n) ?? nul}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">No 1:1s in the last 8 weeks.</p>')}`;
 }
 

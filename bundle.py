@@ -9,6 +9,8 @@ import zipfile
 
 import pandas as pd
 
+import onefile
+
 RUBRICS = ("content", "pedagogy", "language", "engagement", "conduct", "doubt", "process", "clarity", "support",
            "independence")
 
@@ -38,6 +40,8 @@ class BundleError(ValueError):
 
 def _members(data: bytes, filename: str) -> dict[str, bytes]:
     """{lower-case base name: bytes} from a zip, or the single CSV itself."""
+    if onefile.is_onefile(data):
+        return {k.lower(): v for k, v in onefile.expand(data).items()}
     if zipfile.is_zipfile(io.BytesIO(data)):
         out, rank = {}, {}
         with zipfile.ZipFile(io.BytesIO(data)) as z:
@@ -45,6 +49,12 @@ def _members(data: bytes, filename: str) -> dict[str, bytes]:
                 base = info.filename.replace("\\", "/").rsplit("/", 1)[-1].lower()
                 if base.endswith(".csv") and not base.startswith("._"):
                     body = z.read(info)
+                    if onefile.is_onefile(body):
+                        for k, v in onefile.expand(body).items():
+                            r = (_csv_export_date(v), info.date_time)
+                            if k not in out or r > rank[k]:
+                                out[k], rank[k] = v, r
+                        continue
                     # the same file twice (e.g. an old copy in a subfolder): keep the newest export
                     r = (_csv_export_date(body), info.date_time)
                     if base not in out or r > rank[base]:

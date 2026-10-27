@@ -1,5 +1,23 @@
 # BigQuery exports for the QA app
 
+## Use this: one query for both pages — `niat_all_in_one.sql`
+
+One read-only query that builds everything both pages read, from one set of rules (same QA scores, same
+instructors, same capability managers, same "below 5" rule everywhere). It returns two columns, `part` and
+`row_json`. Save the whole result as one CSV and upload it on either page; the app splits it and updates both.
+
+- Console: run it, then **Save results → CSV (Google Drive)** (the result is about 15 MB, over the 10 MB
+  direct-download limit), download from Drive, upload.
+- Cloud Shell: `bq query --nouse_legacy_sql --format=csv --max_rows=5000000 < niat_all_in_one.sql > niat_all_in_one.csv`
+- Run it **in the evening, after classes**: "today" is the IST date when it runs.
+
+Rules: QA score = latest completed SCHEDULE evaluation of a LECTURE/PRACTICE session (one per session section);
+an instructor's QA days = their last 3 days with a score, up to yesterday, and only if one of them is in the last
+14 days; **below 5 = each of those 3 days averages below 5**; capability manager = the instructor's managers that
+are on the list of 14 (`cap_list` in the query); weeks start on Monday.
+
+## Older queries (still work)
+
 Five read-only queries on `kossip-helpers.niat_instructor_efficacy_ai_analytics_workspace`, and a script
 that runs them and writes the CSVs.
 

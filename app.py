@@ -25,6 +25,7 @@ import pandas as pd
 
 import drill_email
 import drilldown
+import onefile
 import llm
 import store as dbstore
 from bundle import INSTRUCTOR_FILE, collect, instructor_file, upload_export_date
@@ -482,7 +483,7 @@ def _save_upload(ups: list[tuple[str, bytes]]) -> dict:
         if raw is not None:
             name = next((n for n, _ in ups if n.lower().endswith(".zip")), ups[0][0])
             out["instructor"] = STORE.save_file(INSTRUCTOR_KEY, f"{name} › {INSTRUCTOR_FILE}", raw, exp)
-        elif len(ups) == 1 and not zipfile.is_zipfile(io.BytesIO(ups[0][1])):
+        elif len(ups) == 1 and not zipfile.is_zipfile(io.BytesIO(ups[0][1])) and not onefile.is_onefile(ups[0][1]):
             out["instructor"] = STORE.save_file(INSTRUCTOR_KEY, ups[0][0], ups[0][1], exp)
     except dbstore.StoreError as e:
         out["errors"].append(f"The file wasn’t saved: {e}")
@@ -590,15 +591,16 @@ def api_drill_upload():
     that date's drill-down. An older run date is added beside the newer ones, never over them."""
     f = request.files.get("file")
     if not f or not f.filename:
-        return jsonify(error="Choose niat_drilldown_export.zip first."), 400
+        return jsonify(error="Choose the drill-down export (zip) or the one-file CSV first."), 400
     data = f.read()
-    # a zip that also carries page 1's instructor file saves it for page 1 too
-    also = _save_upload([(f.filename, data)]) if STORE and zipfile.is_zipfile(io.BytesIO(data)) else None
+    # a zip or one-file export that also carries page 1's instructor file saves it for page 1 too
+    also = (_save_upload([(f.filename, data)])
+            if STORE and (zipfile.is_zipfile(io.BytesIO(data)) or onefile.is_onefile(data)) else None)
     page1 = also and also.get("instructor")
     try:
         if not drilldown.is_drill_zip(data):
-            msg = ("This zip has no drill-down data: the 13 files 01_universities.csv … 13_tickets_month.csv "
-                   "aren’t in it.")
+            msg = ("This file has no drill-down data: the 13 files 01_universities.csv … 13_tickets_month.csv "
+                   "(or the one-file export) aren’t in it.")
             if page1:
                 msg += (f" Its instructor file (export of {page1['export_date'] or 'unknown date'}) was saved for "
                         "Instructor emails.")
@@ -608,7 +610,7 @@ def api_drill_upload():
         if not STORE:
             _unsaved.update(data=D, info={"filename": f.filename, "saved_at": None, "export_date": run})
             return _gz_json(_drill_answer(D, _unsaved["info"], {}))
-        STORE.save_file(DRILL_PREFIX + run, f.filename, data, run)
+        STORE.save_file(DRILL_PREFIX + run, f.filename, drilldown.pack(data), run)
         saved = STORE.list_files(DRILL_PREFIX)
         STORE.delete_files([x["key"] for x in saved[dbstore.keep_days():]])
         _answers.clear()

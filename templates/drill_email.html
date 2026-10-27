@@ -59,12 +59,12 @@
 </table>
 {{ note(("Top 10 of " ~ s.not_done|length ~ ". " if s.not_done|length > 10 else "") ~ "Current semester of each batch. A session counts when its own date in the schedule is on or before " ~ run_short ~ " and it is still Pending, Started or not marked.") }}{% endif %}
 
-{% if s.low_qa %}{{ h3(s.low_qa|length ~ " active instructor" ~ (" is" if s.low_qa|length == 1 else "s are") ~ " below 5 QA", RED) }}
+{% if s.low_qa %}{{ h3(s.low_qa|length ~ " active instructor" ~ (" is" if s.low_qa|length == 1 else "s are") ~ " below 5 on each of their last 3 QA days", RED) }}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;">
-<tr><td style="{{ TH }}">Instructor</td><td style="{{ TH }}{{ R }}">QA</td><td style="{{ TH }}{{ R }}">n</td><td style="{{ TH }}">Subject</td><td style="{{ TH }}">Capability manager</td><td style="{{ TH }}">Taught at, 14 days</td></tr>
-{% for i in s.low_qa[:15] %}<tr><td style="{{ TD }}">{{ i.name }}</td><td style="{{ TD }}{{ R }}color:{{ RED }};font-weight:bold;">{{ i.qa }}</td><td style="{{ TD }}{{ R }}">{{ i.n }}</td><td style="{{ TD }}">{{ i.subject|title if i.subject else "—" }}</td><td style="{{ TD }}">{{ i.manager }}</td><td style="{{ TD }}">{{ i.taught_at or "no session" }}</td></tr>{% endfor %}
+<tr><td style="{{ TH }}">Instructor</td><td style="{{ TH }}">Last 3 QA days</td><td style="{{ TH }}">Subject</td><td style="{{ TH }}">Capability manager</td><td style="{{ TH }}">Taught at, 14 days</td></tr>
+{% for i in s.low_qa[:15] %}<tr><td style="{{ TD }}">{{ i.name }}</td><td style="{{ TD }}white-space:nowrap;">{% for d in i.days %}<span style="color:#6B7280;">{{ d[0]|qday }}</span> <b style="color:{{ RED }};">{{ d[1] }}</b>{% if not loop.last %} · {% endif %}{% endfor %}</td><td style="{{ TD }}">{{ i.subject|title if i.subject else "—" }}</td><td style="{{ TD }}">{{ i.manager }}</td><td style="{{ TD }}">{{ i.taught_at or "no session" }}</td></tr>{% endfor %}
 </table>
-{{ note(("Lowest 15 of " ~ s.low_qa|length ~ "; the rest are on the page. " if s.low_qa|length > 15 else "") ~ "QA = the instructor’s average over their own last 3 days with a QA score, across all universities. n = QA scores in those days.") }}{% endif %}
+{{ note(("Lowest 15 of " ~ s.low_qa|length ~ "; the rest are on the page. " if s.low_qa|length > 15 else "") ~ "Listed when each of the instructor’s last 3 days with a QA score has a daily average below 5 (the same rule as the Instructor emails page), across all universities. Lowest average first.") }}{% endif %}
 </td></tr>
 
 <tr><td style="padding:18px 24px 6px;border-top:1px solid {{ RULE }};">

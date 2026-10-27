@@ -1,13 +1,15 @@
-"""The University Drill-down: reads the 13-file BigQuery export (niat_drilldown_export.zip) into the
+"""The University Drill-down: reads the 13-file BigQuery export (niat_drilldown_export.zip, or the one-file
+export of bigquery/niat_all_in_one.sql) into the
 data the page and the daily email use, and works out the email's summary.
 
 Shape of the data (the page's script reads it as is):
-  meta            run_date (latest class day in file 02), from, files (export_status.csv)
+  meta            run_date (the export's meta row, else window start + 13), from, files (export_status.csv)
   cols            column names of the packed rows below
   universities    one per university in file 01, most classes first; each with its sections
                   (days, attendance, feedback, course plan, tomorrow), issue classes, rubric sums,
                   weekly QA, tickets and the semester schedule by status
-  instructors     file 11: active instructors, plus inactive ones who still have a QA score
+  instructors     file 11: active instructors, plus inactive ones who still have a QA score; each gets
+                  low_qa = each of the last 3 QA days below 5 (the export's low_qa_flag when it has one)
   managers_weekly file 12
   tickets_no_uni  file 13 rows without a university
   qa_weeks        the weeks (Mondays) in file 07
@@ -20,6 +22,8 @@ import io
 import re
 import zipfile
 from datetime import date, timedelta
+
+import onefile
 
 FILES = ["01_universities", "02_section_day", "03_attention_classes", "04_subject_status",
          "05_curriculum_progress", "06_next_day", "07_qa_weekly", "08_rubric", "09_students_daily",
@@ -51,7 +55,8 @@ TEXT = {"institute_id", "institute_name", "institute_type", "location", "section
         "section_id_one", "week", "rubric", "instructor_user_id", "category", "home_institute", "status", "managers",
         "taught_at", "qa_last3_days", "connect_statuses_this_week", "last_completed_connect", "manager_id", "manager",
         "assigned_team", "ticket_status", "sub_category", "sla_breach_statuses", "oldest_open_created",
-        "instructor_ids", "file_name", "error", "rows", "first_start"}
+        "instructor_ids", "file_name", "error", "rows", "first_start", "instructor_mail", "run_date", "from_date",
+        "next_day", "qa_end", "exported_at_utc", "query_version"}
 
 
 class DrillError(ValueError):
@@ -76,33 +81,75 @@ def _val(col: str, v: str):
         return v
 
 
-def read_zip(data: bytes) -> dict[str, list[dict]]:
-    """{file stem: rows} for the 13 files (and export_status). Folders inside the zip are fine."""
+def _csvs(data: bytes) -> dict[str, bytes]:
+    """{file stem: bytes} from a zip (folders are fine) or the one-file export (a CSV, or inside a zip)."""
+    if onefile.is_onefile(data):
+        return {k[:-4].lower(): v for k, v in onefile.expand(data).items()}
     try:
         z = zipfile.ZipFile(io.BytesIO(data))
-    except zipfile.BadZipFile as e:
-        raise DrillError("This isn’t a zip file. Upload niat_drilldown_export.zip.") from e
-    names = {re.sub(r"\.csv$", "", n.rsplit("/", 1)[-1].lower()): n for n in z.namelist() if n.lower().endswith(".csv")}
+    except zipfile.BadZipFile:
+        return {}
+    out = {}
+    for n in z.namelist():
+        if n.lower().endswith(".csv") and not n.rsplit("/", 1)[-1].startswith("._"):
+            b = z.read(n)
+            if onefile.is_onefile(b):
+                out.update({k[:-4].lower(): v for k, v in onefile.expand(b).items()})
+            else:
+                out.setdefault(re.sub(r"\.csv$", "", n.rsplit("/", 1)[-1].lower()), b)
+    return out
+
+
+def read_zip(data: bytes) -> dict[str, list[dict]]:
+    """{file stem: rows} for the 13 files (and export_status, meta)."""
+    files = _csvs(data)
+    if not files:
+        raise DrillError("This isn’t the drill-down export. Upload the zip, or the one-file CSV from niat_all_in_one.sql.")
+    names = {k: k for k in files}
     missing = [f for f in FILES if f not in names]
     if missing:
         raise DrillError("This zip isn’t the drill-down export: it has no " + ", ".join(f + ".csv" for f in missing[:4])
                          + (f" and {len(missing) - 4} more" if len(missing) > 4 else "") + ".")
     out = {}
-    for stem in FILES + ["export_status"]:
+    for stem in FILES + ["export_status", "meta"]:
         if stem not in names:
             continue
-        txt = z.read(names[stem]).decode("utf-8-sig")
+        txt = files[stem].decode("utf-8-sig")
         out[stem] = [{k: _val(k, v) for k, v in r.items()} for r in csv.DictReader(io.StringIO(txt))]
     return out
 
 
+def pack(data: bytes) -> bytes:
+    """What is stored for a run date: a zip of the drill-down files only. The one-file export (about 14 MB,
+    most of it the instructor emails' data) becomes a small zip; an ordinary drill-down zip is kept as it is."""
+    files = _csvs(data)
+    if not onefile.is_onefile(data) and "meta" not in files:
+        return data
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for stem in FILES + ["export_status", "meta"]:
+            if stem in files:
+                z.writestr(f"{stem}.csv", files[stem])
+    return buf.getvalue()
+
+
 def is_drill_zip(data: bytes) -> bool:
+    stems = set(_csvs(data))
+    return "02_section_day" in stems and "11_instructors" in stems
+
+
+def low_qa(i: dict, run: str | None = None) -> bool:
+    """Each of the instructor's last 3 QA days has a daily average below 5 (all 3 days needed), and the newest
+    of them is within 14 days of the run date (the instructor emails page's rule)."""
+    if i.get("low_qa_flag") is not None:
+        return i["low_qa_flag"] is True
+    days = [x.split() for x in (i.get("qa_last3_days") or "").split(" | ") if x.strip()]
     try:
-        z = zipfile.ZipFile(io.BytesIO(data))
-    except zipfile.BadZipFile:
+        if run and max(d[0] for d in days) < (date.fromisoformat(run) - timedelta(days=14)).isoformat():
+            return False
+        return len(days) == 3 and all(float(d[1]) < 5 for d in days)
+    except (IndexError, ValueError):
         return False
-    stems = {n.rsplit("/", 1)[-1].lower() for n in z.namelist()}
-    return "02_section_day.csv" in stems and "11_instructors.csv" in stems
 
 
 def _pack(kind: str, r: dict) -> list:
@@ -118,6 +165,9 @@ def build(data: bytes) -> dict:
     # window + 13 (an export made before the day's first class has no class rows for run_date itself)
     first = min(r["day"] for f in ("02_section_day", "09_students_daily", "10_feedback_daily") for r in F[f] if r.get("day"))
     run = max(max(r["day"] for r in days), (date.fromisoformat(first) + timedelta(days=13)).isoformat())
+    meta = (F.get("meta") or [{}])[0]
+    if meta.get("run_date"):
+        run = str(meta["run_date"])[:10]
     unis, order = {}, []
     for r in F["01_universities"]:
         u = {"id": r["institute_id"], "name": r["institute_name"], "type": r["institute_type"], "location": r["location"],
@@ -208,6 +258,8 @@ def build(data: bytes) -> dict:
 
     inst = [i for i in F["11_instructors"] if i.get("instructor_user_id")
             and (i.get("status") == "ACTIVE" or i.get("qa_last3_avg") is not None)]
+    for i in inst:
+        i["low_qa"] = low_qa(i, run)
     mw = F["12_managers_weekly"]
     caps = list(dict.fromkeys(r["manager"] for r in mw if r.get("manager")))
     return {
@@ -344,10 +396,10 @@ def summary(D: dict, reasons: dict | None = None) -> dict:
         c = [m for m in (i.get("managers") or "").split(", ") if m.lower() in caps]
         return ", ".join(c) if c else "no capability manager"
 
-    low = sorted([i for i in inst if i.get("status") == "ACTIVE" and i.get("qa_last3_avg") is not None
-                  and i.get("qa_last3_n") and i["qa_last3_avg"] < 5],
-                 key=lambda i: (i["qa_last3_avg"], -(i["qa_last3_n"] or 0)))
+    low = sorted([i for i in inst if i.get("status") == "ACTIVE" and i.get("low_qa", low_qa(i, D["meta"]["run_date"]))],
+                 key=lambda i: (i["qa_last3_avg"] if i.get("qa_last3_avg") is not None else 99, -(i["qa_last3_n"] or 0)))
     low = [{"name": i.get("instructor_name") or "Unnamed", "qa": i["qa_last3_avg"], "n": i["qa_last3_n"],
+            "days": [(x.split() + ["", ""])[:2] for x in (i.get("qa_last3_days") or "").split(" | ") if x.strip()],
             "subject": i.get("category"), "manager": capl(i), "taught_at": i.get("taught_at")} for i in low]
 
     # subjects: last full week against the week before

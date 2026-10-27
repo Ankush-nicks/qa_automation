@@ -24,6 +24,16 @@ def wday(s: str | None) -> str:
     return f"{WD[date.fromisoformat(s).weekday()]} {day(s)}" if s else "no data"
 
 
+def qday(s: str) -> str:
+    try:
+        return day(s[:10])
+    except ValueError:
+        return s
+
+
+_env.filters["qday"] = qday
+
+
 def subject(S: dict) -> str:
     return f"NIAT University Drill-down · {wday(S['run_date'])}"
 
@@ -91,8 +101,9 @@ def render_text(S: dict, link: str) -> str:
         L += [f"  - {g['uni']}, {g['sem']}: {g['gap']:,} of {g['sched']:,} ({g['gs']} of {g['secs']} sections)"
               for g in S["not_done"][:10]]
     if S["low_qa"]:
-        L.append(f"{len(S['low_qa'])} active instructors below 5 QA (last 3 QA days):")
-        L += [f"  - {i['name']} {i['qa']} (n={i['n']}), {(i['subject'] or '').title()}, {i['manager']}"
+        L.append(f"{len(S['low_qa'])} active instructors below 5 on each of their last 3 QA days:")
+        L += [f"  - {i['name']}: {', '.join(qday(d[0]) + ' ' + d[1] for d in i['days'])}; "
+              f"{(i['subject'] or '').title()}, {i['manager']}"
               for i in S["low_qa"][:15]]
     L += ["", f"2. SUBJECTS — QA in the week of {c['last_wk']} vs the week before"]
     for r in S["subjects"]:

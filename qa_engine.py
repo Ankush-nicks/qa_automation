@@ -305,14 +305,19 @@ def norm_id(s):
 def read_export(data: bytes, filename: str) -> pd.DataFrame:
     """Returns a DataFrame with lower-case column names. Raises ValueError with a readable message.
     A zip (the daily qa_exports_YYYYMMDD.zip) is opened and its instructor file is used."""
-    if zipfile.is_zipfile(io.BytesIO(data)):
-        with zipfile.ZipFile(io.BytesIO(data)) as z:
-            names = [n for n in z.namelist() if n.lower().endswith(".csv") and not n.rsplit("/", 1)[-1].startswith("._")]
-            pick = next((n for n in names if "instructor_qa" in n.lower()), None)
-            if not pick:
-                raise ValueError("This zip has no instructor QA file (instructor_qa_last3_export.csv). "
-                                 f"Files in it: {', '.join(names) or 'none'}.")
-            data, filename = z.read(pick), pick
+    import bundle  # here, not at the top: bundle is a sibling module that also reads exports
+    import onefile
+    if onefile.is_onefile(data) or zipfile.is_zipfile(io.BytesIO(data)):
+        # a zip or the one-file export: its instructor file (the newest copy when there are two)
+        files = bundle.collect([(filename, data)])
+        pick = bundle.instructor_file(files)
+        if pick is None:
+            pick_name = next((n for n in files if "instructor_qa" in n), None)
+            if not pick_name:
+                raise ValueError("This file has no instructor QA data (instructor_qa_last3_export.csv). "
+                                 f"Files in it: {', '.join(sorted(files)) or 'none'}.")
+            pick = files[pick_name]
+        data, filename = pick, "instructor_qa_last3_export.csv"
     frames = []
     if re.search(r"\.(xlsx|xlsm|xls)$", filename or "", re.I):
         try:

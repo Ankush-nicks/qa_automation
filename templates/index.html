@@ -122,6 +122,21 @@ input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events
 .field.check input{width:auto;margin:0;accent-color:var(--ink)}
 .summary{margin:0 0 18px;font-size:16px;max-width:90ch}
 .summary b{font-weight:600}
+/* QA average for a date range */
+.range{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 18px;padding:12px 14px;border:1px solid var(--rule);border-radius:6px;background:var(--blue-tint)}
+.range .rlbl{font-weight:600;font-size:14.5px}
+.range .rand{color:var(--muted);font-size:14px}
+.range input[type=date]{padding:5px 8px;border:1px solid var(--rule);border-radius:6px;background:var(--sheet);font-size:14px}
+.range input[type=date]:disabled{opacity:.55}
+.rquick{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14px;margin-left:6px}
+.rquick .tab[disabled]{opacity:.5;cursor:not-allowed}
+.rnote{flex-basis:100%;margin:0;font-size:13.5px;color:var(--muted)}
+.rnote b{color:var(--ink);font-weight:600}
+@media (max-width:700px){.rquick{margin-left:0;flex-basis:100%}}
+.cell.wide{width:auto;min-width:50px;padding:0 9px;border-radius:17px}
+.ravg{display:flex;flex-wrap:wrap;align-items:center;gap:10px;font-size:14.5px;color:var(--muted);margin-bottom:10px}
+.ravg .score{font-size:18px;padding:2px 10px}
+.tbl.rdays{max-height:280px;overflow:auto}
 .filebar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;color:var(--muted);font-size:14px;min-width:0}
 .filebar span{overflow-wrap:anywhere}
 
@@ -265,6 +280,13 @@ td.num{white-space:nowrap}
     </div>
     <div class="busyline hidden" id="refreshing" role="status"><span class="spin" aria-hidden="true"></span>Updating with the new settings…</div>
     <p class="summary" id="summary"></p>
+    <div class="range" id="range" role="group" aria-labelledby="rLbl">
+      <span class="rlbl" id="rLbl">QA average between</span>
+      <input type="date" id="rFrom" aria-label="From date" disabled><span class="rand">and</span><input type="date" id="rTo" aria-label="To date" disabled>
+      <span class="rquick" id="rQuick"><button class="tab" data-q="7" disabled>Last 7 days</button><button class="tab" data-q="14" disabled>Last 14 days</button><button class="tab" data-q="30" disabled>Last 30 days</button><button class="tab" data-q="month" disabled>This month</button><button class="tab" data-q="lastmonth" disabled>Last month</button></span>
+      <button class="btn small ghost hidden" id="rClear">Clear dates</button>
+      <p class="rnote" id="rNote" role="status">Loading QA scores by day…</p>
+    </div>
     <div class="main">
       <aside class="panel listpanel" aria-label="Instructors">
         <div class="subjects" role="group" aria-label="Filter by subject" id="subjects"></div>
@@ -442,7 +464,11 @@ async function analyze(first){
   $("err").style.display="none";
   $("fileName").textContent=j.file+(sending||!j.saved_file?"":` · saved ${new Date(j.saved_file.saved_at).toLocaleString()}`);
   $("filebar").classList.remove("hidden"); $("drop").classList.add("hidden"); $("app").classList.remove("hidden");
+  // a new upload may bring new QA-by-day data: fetch it again and keep the chosen dates when they still fit
+  if(first&&sending){ RQ.data=null; RQ.err=null; RQ.loading=null; }
   render();
+  if(first) loadRange().then(()=>{ const R=state.range, D=RQ.data;
+    if(R&&(!D||!D.days||R.to<D.qa_from||R.from>D.qa_end)){ state.range=null; $("rFrom").value=$("rTo").value=""; render(); } });
 }
 
 function handleFile(file){ if(!file) return; state.file=file; analyze(true); }
@@ -461,7 +487,8 @@ fetch("/api/manager/saved").then(r=>r.json()).then(j=>{
 const inst=id=>state.data.instructors.find(x=>x.id===id);
 function groups(){
   const all=state.data.instructors.filter(x=>state.subj==="all"||(x.category||"")===state.subj);
-  return {flagged:all.filter(x=>x.flagged), watch:all.filter(x=>x.watch), esc:all.filter(x=>x.escalations.length), all};
+  const range=state.range?rangeItems().filter(i=>state.subj==="all"||(i.category||"")===state.subj):[];
+  return {flagged:all.filter(x=>x.flagged), watch:all.filter(x=>x.watch), esc:all.filter(x=>x.escalations.length), all, range};
 }
 
 async function writeAI(id){
@@ -502,12 +529,16 @@ function render(){
   const ruleText=`below ${fT(T)} on each of their last 3 QA days (each day’s average checked on its own)`;
   const subjLabel=state.subj==="all"?"":(subs.find(([k])=>k===state.subj)||[,state.subj])[1];
   $("summary").innerHTML=`${subjLabel?`<b>${esc(subjLabel)} only:</b> ${G.all.length} of `:""}${D.instructors.length} instructors in this export${D.skipped?` (${D.skipped} row${D.skipped===1?"":"s"} couldn’t be read and ${D.skipped===1?"was":"were"} skipped)`:""}. <b>${G.flagged.length}</b> ${G.flagged.length===1?"is":"are"} ${ruleText}, ${G.watch.length} ${G.watch.length===1?"is":"are"} close to the line, and ${escCount} session${escCount===1?"":"s"} need${escCount===1?"s":""} an escalation check.`;
-  const tabs=[["flagged","Flagged",G.flagged.length],["watch","Close to the line",G.watch.length],["esc","Escalation checks",G.esc.length],["all","All",G.all.length]];
-  $("tabs").innerHTML=tabs.map(([k,l,c])=>`<button class="tab" data-tab="${k}" aria-pressed="${state.tab===k}">${l} (${c})</button>`).join("");
+  if(state.tab==="range"&&!state.range) state.tab="flagged";
+  const tabs=[...(state.range?[["range",dRange(state.range.from,state.range.to),G.range.length]]:[]),
+    ["flagged","Flagged",G.flagged.length],["watch","Close to the line",G.watch.length],["esc","Escalation checks",G.esc.length],["all","All",G.all.length]];
+  $("tabs").innerHTML=tabs.map(([k,l,c])=>`<button class="tab" data-tab="${k}" aria-pressed="${state.tab===k}"${k==="range"?` title="Everyone with QA scores between these dates, lowest average first"`:""}>${esc(l)} (${c})</button>`).join("");
   const q=state.q.toLowerCase();
   let rows=G[state.tab].filter(x=>!q||[x.name,x.institute,x.email].join(" ").toLowerCase().includes(q));
   if(state.tab==="all") rows=[...rows].sort((a,b)=>(b.flagged-a.flagged)||((a.mean3??99)-(b.mean3??99)));
-  $("list").innerHTML=rows.length?rows.map(x=>{
+  if(state.tab==="range") $("list").innerHTML=rows.length?rows.map(i=>`<li><button class="item" data-id="${esc(i.id)}" aria-current="${state.sel===i.id}"><span><span class="nm">${esc(i.name)}</span><span class="mt">${esc(i.category)}${i.institute?", "+esc(i.institute):""}</span><span class="mt">${i.r.n} score${i.r.n===1?"":"s"} on ${i.r.days.length} day${i.r.days.length===1?"":"s"}${i.x?"":" · not in the email list"}</span></span><span class="strip"><span class="cell wide ${scoreClass(i.r.avg,T)}" title="Average ${dRange(state.range.from,state.range.to)}">${i.r.avg.toFixed(2)}</span></span></button></li>`).join("")
+    :`<li class="emptylist">No QA scores between ${esc(dRange(state.range.from,state.range.to))}${q?" for this search":""}.</li>`;
+  else $("list").innerHTML=rows.length?rows.map(x=>{
     const cells=x.days.map(d=>`<span class="cell ${scoreClass(d.avg,T)}" title="${esc(dShort(d.date))}">${d.avg==null?"–":d.avg.toFixed(1)}</span>`).join("");
     const d=state.drafts[x.id];
     const le=lastEmailed(x);
@@ -516,12 +547,21 @@ function render(){
   }).join(""):`<li class="emptylist">${state.tab==="flagged"?"No instructors meet this rule. Try a different threshold above.":"No instructors in this list."}</li>`;
   $("copyAll").disabled=!G.flagged.length;
   $("aiAll").disabled=!!state.writingAll||!G.flagged.length||!(state.llm&&state.llm.configured);
+  renderRange(G,T);
   renderDetail(S);
 }
 
 function renderDetail(S){
   const x=state.sel&&inst(state.sel);
-  if(!x){ $("detail").innerHTML=`<div class="placeholder">Select an instructor to see their scores and email.</div>`; return; }
+  if(!x){
+    // someone in the date range who isn't in this week's email list: their range average only
+    const ri=state.sel&&state.range&&rangeItems().find(i=>i.id===state.sel);
+    $("detail").innerHTML=ri?`<div class="detail"><div class="dhead"><div><h2>${esc(ri.name)}</h2>
+      <div class="meta">${esc(ri.category)}${ri.institute?", "+esc(ri.institute):""}${ri.status&&ri.status!=="ACTIVE"?` · ${esc(ri.status.charAt(0)+ri.status.slice(1).toLowerCase())}`:""}</div>
+      <div class="meta">Not in the email list, which covers instructors with a QA day in the last 14 days.</div></div></div>${rangeBlock(ri.id,S.threshold)}</div>`
+      :`<div class="placeholder">Select an instructor to see their scores and email.</div>`;
+    return;
+  }
   const T=S.threshold, d=state.drafts[x.id];
   const badge=x.flagged?`<span class="badge lo">Flagged</span>`:x.watch?`<span class="badge md">Close to the line</span>`:"";
   const tpos=Math.min(100,Math.max(0,T*10));
@@ -547,6 +587,7 @@ function renderDetail(S){
         if(m) return `<div class="meta">Capability manager: ${esc(m.name)}</div>`+(m.external.length?`<div class="meta">Not CC’d (outside the company): ${esc(m.external.join(", "))}</div>`:"");
         return `<div class="meta">No capability manager found${state.mgrs&&state.mgrs.count?" from the list":""}${x.managers?` among: ${esc(x.managers)}`:" (no manager names in the export)"}</div>`; })()}
     </div>${marks}</div>
+    ${rangeBlock(x.id,T)}
     <h3>Email</h3>
     ${warns.map(w=>`<div class="warn">${esc(w)}</div>`).join("")}
     <p class="source">${src}${sent?` · ${esc(sent)}`:""}${(()=>{ const le=lastEmailed(x); return le?` · <b>Last emailed ${dayLabel(le)}</b>`:""; })()}</p>
@@ -679,7 +720,93 @@ function copyText(text,msg,html){
   else fallback();
 }
 
+/* QA average for a date range. Each instructor's QA per day (sum and count of scores, last 60 days) comes
+   from the saved drill-down export's 15_qa_days part. The flag and the emails keep the last-3-QA-days rule. */
+const RQ={data:null,err:null,loading:null};
+const isoAdd=(s,n)=>{ const d=new Date(s+"T00:00:00Z"); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); };
+const dRange=(a,b)=>a===b?dShort(a):`${dShort(a)} – ${dShort(b)}`;
+const WDAYS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const dDay=s=>`${WDAYS[new Date(s+"T00:00:00Z").getUTCDay()]} ${dShort(s)}`;
+function loadRange(){
+  if(RQ.loading) return RQ.loading;
+  RQ.loading=fetch("/api/qa_days").then(r=>r.json().catch(()=>({error:`The server returned an error (${r.status}).`}))
+      .then(j=>{ if(!r.ok||j.error) throw new Error(j.error||`The server returned an error (${r.status}).`); RQ.data=j; RQ.err=null; }))
+    .catch(e=>{ RQ.err=e.message; })
+    .finally(()=>{ if(state.data) render(); });
+  return RQ.loading;
+}
+function rangeOf(id){
+  const R=state.range, L=R&&RQ.data&&RQ.data.days&&RQ.data.days[normId(id)]; if(!L) return null;
+  let s=0,n=0; const days=[];
+  L.forEach(([d,sum,k])=>{ if(d>=R.from&&d<=R.to&&k){ s+=sum; n+=k; days.push({d,avg:sum/k,n:k}); } });
+  return n?{avg:s/n,n,days}:null;
+}
+let rangeCache=null;
+function rangeItems(){
+  if(!state.range||!RQ.data||!RQ.data.days) return [];
+  const key=`${state.range.from}|${state.range.to}`;
+  if(rangeCache&&rangeCache.key===key&&rangeCache.data===state.data&&rangeCache.rq===RQ.data) return rangeCache.items;
+  const byId=new Map(state.data.instructors.map(x=>[normId(x.id),x])), out=[];
+  Object.keys(RQ.data.days).forEach(id=>{
+    const r=rangeOf(id); if(!r) return;
+    const x=byId.get(id), nm=RQ.data.names[id]||[];
+    out.push(x?{x,id:x.id,name:x.name,category:x.category||"",institute:x.institute||"",email:x.email||"",r}
+             :{x:null,id,name:nm[0]||"Unnamed instructor",category:nm[1]||"",institute:nm[2]||"",status:nm[3]||"",email:"",r});
+  });
+  out.sort((a,b)=>(a.r.avg-b.r.avg)||a.name.localeCompare(b.name));
+  rangeCache={key,data:state.data,rq:RQ.data,items:out};
+  return out;
+}
+function rangeBlock(id,T){
+  if(!state.range) return "";
+  const R=state.range, r=rangeOf(id);
+  const head=`<h3>QA average, ${esc(dRange(R.from,R.to))}</h3>`;
+  if(!r) return head+`<p style="color:var(--muted);margin:0">No QA scores between these dates.</p>`;
+  return head+`<div class="ravg"><span class="score ${scoreClass(r.avg,T)}">${r.avg.toFixed(2)}</span><span>from ${r.n} score${r.n===1?"":"s"} on ${r.days.length} day${r.days.length===1?"":"s"}${r.avg<T?`, below ${fT(T)}`:""}</span></div>
+    <div class="tbl rdays"><table><thead><tr><th>Day</th><th>Average</th><th>Scores</th></tr></thead><tbody>${r.days.map(d=>`<tr><td class="num">${esc(dDay(d.d))}</td><td class="num"><span class="score ${scoreClass(d.avg,T)}">${d.avg.toFixed(2)}</span></td><td class="num">${d.n}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function renderRange(G,T){
+  const D=RQ.data, ok=!!(D&&D.days&&D.qa_from&&D.qa_end);
+  [$("rFrom"),$("rTo"),...$("rQuick").querySelectorAll("button")].forEach(el=>el.disabled=!ok);
+  $("rClear").classList.toggle("hidden",!state.range);
+  if(ok){ [$("rFrom"),$("rTo")].forEach(el=>{ el.min=D.qa_from; el.max=D.qa_end; }); }
+  $("rQuick").querySelectorAll("button").forEach(b=>{ const p=ok&&quickRange(b.dataset.q);
+    b.setAttribute("aria-pressed",String(!!(p&&state.range&&p[0]===state.range.from&&p[1]===state.range.to))); });
+  let note;
+  if(!D&&!RQ.err) note="Loading QA scores by day…";
+  else if(RQ.err) note=`QA by day isn’t available: ${esc(RQ.err)}`;
+  else if(!D.days) note="Date ranges need the latest <code>niat_all_in_one.sql</code>, which adds each day’s QA scores. Run it and upload its output on either page.";
+  else if(!state.range) note=`Pick dates between ${esc(dShort(D.qa_from))} and ${esc(dShort(D.qa_end))} to see each instructor’s average QA for just those days. Flags and emails still use the last 3 QA days.`;
+  else {
+    const L=G.range, n=L.reduce((a,i)=>a+i.r.n,0), s=L.reduce((a,i)=>a+i.r.avg*i.r.n,0), low=L.filter(i=>i.r.avg<T).length;
+    note=L.length?`<b>${L.length}</b> instructor${L.length===1?"":"s"} had QA scores between ${esc(dRange(state.range.from,state.range.to))}; <b>${low}</b> average${low===1?"s":""} below ${fT(T)}. Overall average ${(s/n).toFixed(2)} from ${n} scores. Each average counts every score in those days.`
+      :`No QA scores between ${esc(dRange(state.range.from,state.range.to))}.`;
+  }
+  $("rNote").innerHTML=note;
+}
+function quickRange(k){
+  const D=RQ.data; if(!D||!D.qa_end) return null;
+  const end=D.qa_end, clamp=f=>f<D.qa_from?D.qa_from:f;
+  if(k==="month") return [clamp(end.slice(0,8)+"01"),end];
+  if(k==="lastmonth"){ const last=isoAdd(end.slice(0,8)+"01",-1); return [clamp(last.slice(0,8)+"01"),last]; }
+  return [clamp(isoAdd(end,1-(+k))),end];
+}
+function setRange(from,to){
+  const D=RQ.data; if(!D||!D.days) return;
+  if(!from&&!to){ state.range=null; $("rFrom").value=$("rTo").value=""; render(); return; }
+  from=from||D.qa_from; to=to||D.qa_end;
+  if(from>to) [from,to]=[to,from];
+  if(from<D.qa_from) from=D.qa_from; if(to>D.qa_end) to=D.qa_end;
+  if(from>D.qa_end||to<D.qa_from){ toast(`QA by day covers ${dShort(D.qa_from)} to ${dShort(D.qa_end)}`); return; }
+  state.range={from,to}; state.tab="range";
+  $("rFrom").value=from; $("rTo").value=to;
+  render();
+}
+
 /* Events */
+["rFrom","rTo"].forEach(id=>$(id).addEventListener("change",()=>setRange($("rFrom").value,$("rTo").value)));
+$("rQuick").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b||b.disabled) return; const p=quickRange(b.dataset.q); if(p) setRange(p[0],p[1]); });
+$("rClear").addEventListener("click",()=>setRange("",""));
 window.addEventListener("error",e=>{ try{ toast(`Something went wrong: ${e.message}`); }catch(_){} });
 ["fileInput","fileInput2"].forEach(id=>$(id).addEventListener("change",ev=>{ handleFile(ev.target.files[0]); ev.target.value=""; }));
 document.addEventListener("dragover",e=>e.preventDefault());

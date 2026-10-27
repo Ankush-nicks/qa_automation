@@ -561,13 +561,35 @@ def _drill_answer(D: dict, info: dict, reasons: dict) -> str:
     applied = drilldown.apply_reasons(D, reasons)
     S = drilldown.summary(D, applied)
     link = (os.getenv("APP_URL", "").strip().rstrip("/") or request.host_url.rstrip("/")) + "/manager"
-    out = {"data": {k: v for k, v in D.items() if k != "sessions"}, "reasons": applied, "reason_options": REASONS if STORE else [],
+    out = {"data": {k: v for k, v in D.items() if k not in ("sessions", "qa_days", "qa_names")}, "reasons": applied, "reason_options": REASONS if STORE else [],
            "file": {"name": info.get("filename"), "saved_at": info.get("saved_at"), "date": D["meta"]["run_date"]},
            "db": bool(STORE),
            "email": {"subject": drill_email.subject(S), "preview": drill_email.render_html(S, link, preview=True),
                      "html": drill_email.render_html(S, link, preview=False),
                      "text": drill_email.render_text(S, link), **_daily_recipients()}}
     return json.dumps(_clean(out), ensure_ascii=False, separators=(",", ":"))
+
+
+@app.get("/api/qa_days")
+def api_qa_days():
+    """The instructor emails page's date range: each instructor's QA per day (sum and count of scores) for the
+    last 60 days, from the newest saved drill-down export (?date=YYYY-MM-DD for another one). days is null
+    when the export is older than the query's 15_qa_days part."""
+    try:
+        D, info = _drill_data(request.args.get("date") or None)
+    except drilldown.DrillError as e:
+        return jsonify(error=str(e)), 404
+    except dbstore.StoreError as e:
+        return jsonify(error=f"The database step failed: {e}"), 502
+    key = ("qa_days", info.get("export_date"), info.get("saved_at"))
+    if key not in _answers:
+        if len(_answers) >= 6:
+            _answers.clear()
+        m = D["meta"]
+        out = {"run_date": m["run_date"], "qa_from": m.get("qa_from"), "qa_end": m.get("qa_end"),
+               "file": info.get("filename"), "days": D.get("qa_days"), "names": D.get("qa_names") or {}}
+        _answers[key] = json.dumps(_clean(out), ensure_ascii=False, separators=(",", ":"))
+    return _gz_json(_answers[key])
 
 
 @app.get("/api/people")

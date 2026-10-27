@@ -20,6 +20,10 @@ Part `14_sessions` (v2) lists every instructor's sessions over the 14 days — o
 across sections counted once, with scheduled minutes — for the name search's workload view (yesterday's sessions,
 hours per day, days over 6 hours). Older exports without it still work; the search then shows 14-day totals only.
 
+Part `15_qa_days` (v3) has each instructor's QA per day for the last 60 days up to yesterday (sum and count of
+scores, same QA rules), for the date range on the Instructor emails page. Without it the date range is turned off
+with a note to re-run the query.
+
 ## Older queries (still work)
 
 Five read-only queries on `kossip-helpers.niat_instructor_efficacy_ai_analytics_workspace`, and a script

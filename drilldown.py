@@ -16,6 +16,9 @@ Shape of the data (the page's script reads it as is):
   caps            the capability managers in file 12
   sessions        file 14 (one-file export v2 and later): {instructor id: [packed session rows]}, for the
                   name search's workload; not sent with the page's main data
+  qa_days         file 15 (v3 and later): {instructor id: [[day, qa_sum, qa_n], ...]} for the last 60 days, for
+                  the instructor emails page's date range; qa_names = {id: [name, category, home institute,
+                  status]} for those instructors. Not sent with the page's main data either
 """
 from __future__ import annotations
 
@@ -60,8 +63,8 @@ TEXT = {"institute_id", "institute_name", "institute_type", "location", "section
         "taught_at", "qa_last3_days", "connect_statuses_this_week", "last_completed_connect", "manager_id", "manager",
         "assigned_team", "ticket_status", "sub_category", "sla_breach_statuses", "oldest_open_created",
         "instructor_ids", "file_name", "error", "rows", "first_start", "instructor_mail", "run_date", "from_date",
-        "next_day", "qa_end", "exported_at_utc", "query_version", "sections"}
-OPTIONAL = ["14_sessions"]
+        "next_day", "qa_end", "exported_at_utc", "query_version", "sections", "qa_from"}
+OPTIONAL = ["14_sessions", "15_qa_days"]
 
 
 class DrillError(ValueError):
@@ -273,13 +276,26 @@ def build(data: bytes) -> dict:
             sessions.setdefault(r["instructor_user_id"], []).append(_pack("sess", r))
     for L in sessions.values():
         L.sort(key=lambda x: (x[0] or "", x[1] or ""))
+    qa_days: dict[str, list] = {}
+    for r in F.get("15_qa_days") or []:
+        if r.get("instructor_user_id") and r.get("day") and r.get("qa_n"):
+            qa_days.setdefault(r["instructor_user_id"], []).append([r["day"], r["qa_sum"], r["qa_n"]])
+    for L in qa_days.values():
+        L.sort()
+    qa_names = {r["instructor_user_id"]: [r.get("instructor_name"), r.get("category"), r.get("home_institute"),
+                                          r.get("status")]
+                for r in F["11_instructors"] if r.get("instructor_user_id") in qa_days}
+    qa_all = [d[0] for L in qa_days.values() for d in L]
     return {
         "cols": COLS,
         "meta": {"run_date": run, "from": (date.fromisoformat(run) - timedelta(days=13)).isoformat(), "source": "BigQuery drill-down export",
+                 "qa_from": str(meta.get("qa_from") or (min(qa_all) if qa_all else ""))[:10] or None,
+                 "qa_end": str(meta.get("qa_end") or (max(qa_all) if qa_all else ""))[:10] or None,
                  "files": [{k: ("" if v is None else str(v)) for k, v in r.items()} for r in F.get("export_status", [])]},
         "universities": order, "instructors": inst, "managers_weekly": mw, "tickets_no_uni": no_uni,
         "qa_weeks": sorted({r["week"] for r in F["07_qa_weekly"] if r.get("week")}), "caps": caps,
         "sessions": sessions if "14_sessions" in F else None,
+        "qa_days": qa_days if "15_qa_days" in F else None, "qa_names": qa_names,
     }
 
 
